@@ -17,37 +17,49 @@ export function App() {
 
   const { state } = useStore();
 
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [profile, setProfile] =
+    useState<Profile | null>(null);
+
+  const [loaded, setLoaded] =
+    useState(false);
 
   // DEBUG DOT
-  const [gazePoint, setGazePoint] = useState({
-    x: window.innerWidth / 2,
-    y: window.innerHeight / 2,
-  });
+  const [gazePoint, setGazePoint] =
+    useState({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
 
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef =
+    useRef<HTMLVideoElement>(null);
 
-  // HOVER TRACKING
-  const hoveredTodoRef = useRef<HTMLElement | null>(null);
+  // HOVER
+  const hoveredElementRef =
+    useRef<HTMLElement | null>(null);
 
-  // TEMPO SGUARDO
-  const hoverTimeRef = useRef(0);
+  const hoverTimeRef =
+    useRef(0);
 
-  // TEMPO FRAME
-  const lastFrameRef = useRef(Date.now());
+  const lastFrameRef =
+    useRef(Date.now());
 
-  // COOLDOWN CLICK
-  const clickCooldownRef = useRef(false);
+  const clickCooldownRef =
+    useRef(false);
 
   // SMOOTHING
-  const smoothX = useRef(window.innerWidth / 2);
-  const smoothY = useRef(window.innerHeight / 2);
+  const smoothX =
+    useRef(window.innerWidth / 2);
+
+  const smoothY =
+    useRef(window.innerHeight / 2);
 
   // LOAD PROFILE
   useEffect(() => {
 
-    const saved = localStorage.getItem('focus-profile');
+    const saved =
+      localStorage.getItem(
+        'focus-profile'
+      );
 
     if (saved) {
 
@@ -68,15 +80,16 @@ export function App() {
 
     let running = true;
 
-    const faceMesh = new FaceMesh({
+    const faceMesh =
+      new FaceMesh({
 
-      locateFile: (file) => {
+        locateFile: (file) => {
 
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
+          return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
 
-      }
+        }
 
-    });
+      });
 
     faceMesh.setOptions({
 
@@ -91,19 +104,26 @@ export function App() {
 
     faceMesh.onResults((results) => {
 
-      if (!results.multiFaceLandmarks?.length) return;
+      if (
+        !results.multiFaceLandmarks
+          ?.length
+      ) return;
 
-      const landmarks = results.multiFaceLandmarks[0];
+      const landmarks =
+        results.multiFaceLandmarks[0];
 
       // NASO
-      const nose = landmarks[1];
+      const nose =
+        landmarks[1];
 
       // SCREEN COORDS
       const targetX =
-        window.innerWidth * (1 - nose.x);
+        window.innerWidth *
+        (1 - nose.x);
 
       const targetY =
-        window.innerHeight * nose.y;
+        window.innerHeight *
+        nose.y;
 
       // SMOOTHING
       smoothX.current =
@@ -114,8 +134,11 @@ export function App() {
         smoothY.current * 0.7 +
         targetY * 0.3;
 
-      const screenX = smoothX.current;
-      const screenY = smoothY.current;
+      const screenX =
+        smoothX.current;
+
+      const screenY =
+        smoothY.current;
 
       // DEBUG DOT
       setGazePoint({
@@ -123,92 +146,170 @@ export function App() {
         y: screenY,
       });
 
-      // REMOVE OLD HOVER
-      document
-        .querySelectorAll('.todo-item-wrap')
-        .forEach((el) => {
-
-          (el as HTMLElement)
-            .classList
-            .remove('gaze-hover');
-
-        });
-
       // TARGET
       const target =
         document.elementFromPoint(
           screenX,
           screenY
-        );
+        ) as HTMLElement | null;
 
       if (!target) return;
 
-      const todo = target.closest(
-        '.todo-item-wrap'
-      ) as HTMLElement | null;
+      // RESET HOVER
+      document
+        .querySelectorAll(
+          '.todo-item-wrap'
+        )
+        .forEach((el) => {
+
+          (
+            el as HTMLElement
+          ).classList.remove(
+            'gaze-hover'
+          );
+
+        });
+
+      // TODO
+      const todo =
+        target.closest(
+          '.todo-item-wrap'
+        ) as HTMLElement | null;
 
       if (!todo) {
 
-        hoveredTodoRef.current = null;
+        hoveredElementRef.current =
+          null;
+
         hoverTimeRef.current = 0;
 
         return;
 
       }
 
-      // VISUAL HOVER
-      todo.classList.add('gaze-hover');
+      // VISUAL
+      todo.classList.add(
+        'gaze-hover'
+      );
 
-      // DELTA TIME
-      const now = Date.now();
+      // CHECK BUTTON
+      const checkBtn =
+        target.closest(
+          '[data-check-button="true"]'
+        ) as HTMLElement | null;
+
+      // BODY
+      const body =
+        target.closest(
+          '.todo-body'
+        ) as HTMLElement | null;
+
+      // TIMER
+      const now =
+        Date.now();
 
       const delta =
-        now - lastFrameRef.current;
+        now -
+        lastFrameRef.current;
 
-      lastFrameRef.current = now;
+      lastFrameRef.current =
+        now;
 
-      // STESSA TASK
-      if (hoveredTodoRef.current === todo) {
+      // CURRENT ELEMENT
+      const currentElement =
+        checkBtn || body;
 
-        hoverTimeRef.current += delta;
+      if (!currentElement) {
+
+        hoveredElementRef.current =
+          null;
+
+        hoverTimeRef.current = 0;
+
+        return;
+
+      }
+
+      // SAME ELEMENT
+      if (
+        hoveredElementRef.current ===
+        currentElement
+      ) {
+
+        hoverTimeRef.current +=
+          delta;
 
       } else {
 
-        hoveredTodoRef.current = todo;
+        hoveredElementRef.current =
+          currentElement;
 
         hoverTimeRef.current = 0;
 
       }
 
-      // CHECK DOPO 2.4 SECONDI
+      // COOLDOWN
       if (
-        hoverTimeRef.current > 2400 &&
-        !clickCooldownRef.current
+        clickCooldownRef.current
+      ) return;
+
+      // -------------------
+      // OPEN TASK
+      // -------------------
+
+      if (
+        body &&
+        currentElement === body &&
+        hoverTimeRef.current > 800
       ) {
 
-        clickCooldownRef.current = true;
+        clickCooldownRef.current =
+          true;
 
-        const checkBtn = todo.querySelector(
-          '[data-check-button="true"]'
-        ) as HTMLElement | null;
-
-        if (checkBtn) {
-
-          checkBtn.dispatchEvent(
-            new MouseEvent('click', {
-              bubbles: true,
-              cancelable: true,
-              view: window,
-            })
-          );
-
-        }
+        body.click();
 
         hoverTimeRef.current = 0;
 
         setTimeout(() => {
 
-          clickCooldownRef.current = false;
+          clickCooldownRef.current =
+            false;
+
+        }, 1500);
+
+      }
+
+      // -------------------
+      // COMPLETE TASK
+      // -------------------
+
+      if (
+        checkBtn &&
+        currentElement ===
+          checkBtn &&
+        hoverTimeRef.current > 1000
+      ) {
+
+        clickCooldownRef.current =
+          true;
+
+        checkBtn.dispatchEvent(
+          new MouseEvent(
+            'click',
+            {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+            }
+          )
+        );
+
+        hoverTimeRef.current = 0;
+
+        setTimeout(() => {
+
+          clickCooldownRef.current =
+            false;
 
         }, 1500);
 
@@ -228,31 +329,42 @@ export function App() {
       })
       .then(async (stream) => {
 
-        console.log('Webcam OK');
+        console.log(
+          'Webcam OK'
+        );
 
-        if (!videoRef.current) return;
+        if (
+          !videoRef.current
+        ) return;
 
-        videoRef.current.srcObject = stream;
+        videoRef.current.srcObject =
+          stream;
 
         await videoRef.current.play();
 
-        const detect = async () => {
+        const detect =
+          async () => {
 
-          if (!running) return;
+            if (!running) return;
 
-          if (videoRef.current) {
+            if (
+              videoRef.current
+            ) {
 
-            await faceMesh.send({
+              await faceMesh.send({
 
-              image: videoRef.current
+                image:
+                  videoRef.current
 
-            });
+              });
 
-          }
+            }
 
-          requestAnimationFrame(detect);
+            requestAnimationFrame(
+              detect
+            );
 
-        };
+          };
 
         detect();
 
@@ -272,11 +384,15 @@ export function App() {
 
       const stream =
         videoRef.current
-          ?.srcObject as MediaStream | null;
+          ?.srcObject as
+          | MediaStream
+          | null;
 
       stream
         ?.getTracks()
-        .forEach(track => track.stop());
+        .forEach(track =>
+          track.stop()
+        );
 
     };
 
@@ -305,8 +421,11 @@ export function App() {
 
           position: 'fixed',
 
-          left: gazePoint.x - 8,
-          top: gazePoint.y - 8,
+          left:
+            gazePoint.x - 8,
+
+          top:
+            gazePoint.y - 8,
 
           width: 16,
           height: 16,
@@ -317,9 +436,11 @@ export function App() {
 
           zIndex: 999999,
 
-          pointerEvents: 'none',
+          pointerEvents:
+            'none',
 
-          boxShadow: '0 0 20px red',
+          boxShadow:
+            '0 0 20px red',
 
         }}
       />
@@ -336,43 +457,46 @@ export function App() {
         }}
       />
 
-      {!loaded ? null : !profile ? (
+      {!loaded
+        ? null
+        : !profile
+        ? (
 
-        <Onboarding
-          onComplete={
-            handleOnboarding
-          }
-        />
-
-      ) : (
-
-        <div
-          className={`app-layout ${
-            !state.sidebarOpen
-              ? 'app-layout--collapsed'
-              : ''
-          }`}
-        >
-
-          <Sidebar
-            profile={profile}
-            onProfileChange={(p) => {
-
-              localStorage.setItem(
-                'focus-profile',
-                JSON.stringify(p)
-              );
-
-              setProfile(p);
-
-            }}
+          <Onboarding
+            onComplete={
+              handleOnboarding
+            }
           />
 
-          <MainContent />
+        ) : (
 
-        </div>
+          <div
+            className={`app-layout ${
+              !state.sidebarOpen
+                ? 'app-layout--collapsed'
+                : ''
+            }`}
+          >
 
-      )}
+            <Sidebar
+              profile={profile}
+              onProfileChange={(p) => {
+
+                localStorage.setItem(
+                  'focus-profile',
+                  JSON.stringify(p)
+                );
+
+                setProfile(p);
+
+              }}
+            />
+
+            <MainContent />
+
+          </div>
+
+        )}
 
     </>
 

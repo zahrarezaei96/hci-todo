@@ -132,48 +132,62 @@ export function TodoItem({ todo }: Props) {
 
         {/* CHECK BUTTON */}
 
-        <button
-          data-check-button="true"
-          className={`check-btn ${
-            todo.completed
-              ? 'check-btn--checked'
-              : ''
-          }`}
-          onClick={(e) => {
-
-            e.stopPropagation();
-
-            dispatch({
-              type: 'TOGGLE_TODO',
-              id: todo.id
-            });
-
-          }}
+        <div
+          data-gaze-check-area="true"
           style={{
-            '--p-color': p.color
-          } as React.CSSProperties}
+            padding: '12px',
+            marginLeft: '-12px',
+            marginRight: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
 
-          {todo.completed && (
+          <button
+            data-check-button="true"
+            className={`check-btn ${
+              todo.completed
+                ? 'check-btn--checked'
+                : ''
+            }`}
+            onClick={(e) => {
 
-            <svg
-              width="10"
-              height="8"
-              viewBox="0 0 10 8"
-              fill="none"
-            >
-              <path
-                d="M1 4L3.5 6.5L9 1"
-                stroke="white"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+              e.stopPropagation();
 
-          )}
+              dispatch({
+                type: 'TOGGLE_TODO',
+                id: todo.id
+              });
 
-        </button>
+            }}
+            style={{
+              '--p-color': p.color
+            } as React.CSSProperties}
+          >
+
+            {todo.completed && (
+
+              <svg
+                width="10"
+                height="8"
+                viewBox="0 0 10 8"
+                fill="none"
+              >
+                <path
+                  d="M1 4L3.5 6.5L9 1"
+                  stroke="white"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+
+            )}
+
+          </button>
+
+        </div>
 
         {/* BODY */}
 
