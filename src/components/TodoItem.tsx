@@ -12,7 +12,11 @@ import {
   StickyNote
 } from 'lucide-react';
 
-const priorityConfig: { value: Priority; label: string; color: string }[] = [
+const priorityConfig: {
+  value: Priority;
+  label: string;
+  color: string;
+}[] = [
   { value: 'low', label: 'Low', color: '#4ade80' },
   { value: 'medium', label: 'Medium', color: '#fbbf24' },
   { value: 'high', label: 'High', color: '#f97316' },
@@ -28,17 +32,22 @@ export function TodoItem({ todo }: Props) {
   const { dispatch } = useStore();
 
   const [expanded, setExpanded] = useState(false);
+
   const [newStep, setNewStep] = useState('');
   const [newTag, setNewTag] = useState('');
+
   const [editingText, setEditingText] = useState(false);
   const [textVal, setTextVal] = useState(todo.text);
 
-  const p = priorityConfig.find(x => x.value === todo.priority)!;
+  const p = priorityConfig.find(
+    x => x.value === todo.priority
+  )!;
 
   const isOverdue =
     todo.dueDate &&
     !todo.completed &&
-    new Date(todo.dueDate) < new Date(new Date().toDateString());
+    new Date(todo.dueDate) <
+      new Date(new Date().toDateString());
 
   const completedSteps =
     todo.steps.filter(s => s.completed).length;
@@ -51,8 +60,8 @@ export function TodoItem({ todo }: Props) {
         type: 'UPDATE_TODO',
         id: todo.id,
         updates: {
-          text: textVal.trim(),
-        },
+          text: textVal.trim()
+        }
       });
 
     }
@@ -68,7 +77,7 @@ export function TodoItem({ todo }: Props) {
     dispatch({
       type: 'ADD_STEP',
       todoId: todo.id,
-      text: newStep.trim(),
+      text: newStep.trim()
     });
 
     setNewStep('');
@@ -77,8 +86,9 @@ export function TodoItem({ todo }: Props) {
 
   function addTag() {
 
-    const tag =
-      newTag.trim().replace(/^#/, '');
+    const tag = newTag
+      .trim()
+      .replace(/^#/, '');
 
     if (!tag || todo.tags.includes(tag)) return;
 
@@ -86,8 +96,8 @@ export function TodoItem({ todo }: Props) {
       type: 'UPDATE_TODO',
       id: todo.id,
       updates: {
-        tags: [...todo.tags, tag],
-      },
+        tags: [...todo.tags, tag]
+      }
     });
 
     setNewTag('');
@@ -97,32 +107,51 @@ export function TodoItem({ todo }: Props) {
   return (
 
     <div
-      id={`todo-${todo.id}`}
-      className={`todo-item-wrap ${todo.completed ? 'todo-item-wrap--done' : ''} ${expanded ? 'todo-item-wrap--expanded' : ''}`}
-      onClick={() => !editingText && setExpanded(!expanded)}
+      data-todo-id={todo.id}
+      className={`todo-item-wrap ${
+        todo.completed
+          ? 'todo-item-wrap--done'
+          : ''
+      } ${
+        expanded
+          ? 'todo-item-wrap--expanded'
+          : ''
+      }`}
+      onClick={() => {
+
+        if (!editingText) {
+          setExpanded(!expanded);
+        }
+
+      }}
     >
 
       {/* MAIN ROW */}
 
       <div className="todo-row">
 
+        {/* CHECK BUTTON */}
+
         <button
-          className={`check-btn ${todo.completed ? 'check-btn--checked' : ''}`}
-          onClick={e => {
+          data-check-button="true"
+          className={`check-btn ${
+            todo.completed
+              ? 'check-btn--checked'
+              : ''
+          }`}
+          onClick={(e) => {
 
             e.stopPropagation();
 
             dispatch({
               type: 'TOGGLE_TODO',
-              id: todo.id,
+              id: todo.id
             });
 
           }}
-          style={
-            {
-              '--p-color': p.color
-            } as React.CSSProperties
-          }
+          style={{
+            '--p-color': p.color
+          } as React.CSSProperties}
         >
 
           {todo.completed && (
@@ -133,7 +162,6 @@ export function TodoItem({ todo }: Props) {
               viewBox="0 0 10 8"
               fill="none"
             >
-
               <path
                 d="M1 4L3.5 6.5L9 1"
                 stroke="white"
@@ -141,16 +169,23 @@ export function TodoItem({ todo }: Props) {
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-
             </svg>
 
           )}
 
         </button>
 
+        {/* BODY */}
+
         <div
           className="todo-body"
-          onClick={e => editingText && e.stopPropagation()}
+          onClick={(e) => {
+
+            if (editingText) {
+              e.stopPropagation();
+            }
+
+          }}
         >
 
           {editingText ? (
@@ -158,9 +193,13 @@ export function TodoItem({ todo }: Props) {
             <input
               className="todo-text-input"
               value={textVal}
-              onChange={e => setTextVal(e.target.value)}
+              onChange={(e) => {
+
+                setTextVal(e.target.value);
+
+              }}
               onBlur={saveText}
-              onKeyDown={e => {
+              onKeyDown={(e) => {
 
                 if (e.key === 'Enter') {
                   saveText();
@@ -171,15 +210,23 @@ export function TodoItem({ todo }: Props) {
                 }
 
               }}
-              onClick={e => e.stopPropagation()}
+              onClick={(e) => {
+
+                e.stopPropagation();
+
+              }}
               autoFocus
             />
 
           ) : (
 
             <span
-              className={`todo-text ${todo.completed ? 'todo-text--done' : ''}`}
-              onDoubleClick={e => {
+              className={`todo-text ${
+                todo.completed
+                  ? 'todo-text--done'
+                  : ''
+              }`}
+              onDoubleClick={(e) => {
 
                 e.stopPropagation();
 
@@ -196,11 +243,19 @@ export function TodoItem({ todo }: Props) {
 
           )}
 
+          {/* META */}
+
           <div className="todo-meta">
 
             {todo.dueDate && (
 
-              <span className={`meta-chip ${isOverdue ? 'meta-chip--overdue' : ''}`}>
+              <span
+                className={`meta-chip ${
+                  isOverdue
+                    ? 'meta-chip--overdue'
+                    : ''
+                }`}
+              >
 
                 <Calendar size={10} />
 
@@ -210,7 +265,7 @@ export function TodoItem({ todo }: Props) {
                   'en-US',
                   {
                     month: 'short',
-                    day: 'numeric',
+                    day: 'numeric'
                   }
                 )}
 
@@ -222,7 +277,8 @@ export function TodoItem({ todo }: Props) {
 
               <span className="meta-chip">
 
-                {completedSteps}/{todo.steps.length} steps
+                {completedSteps}/
+                {todo.steps.length} steps
 
               </span>
 
@@ -258,15 +314,21 @@ export function TodoItem({ todo }: Props) {
 
         </div>
 
+        {/* STAR */}
+
         <button
-          className={`star-btn ${todo.starred ? 'star-btn--active' : ''}`}
-          onClick={e => {
+          className={`star-btn ${
+            todo.starred
+              ? 'star-btn--active'
+              : ''
+          }`}
+          onClick={(e) => {
 
             e.stopPropagation();
 
             dispatch({
               type: 'TOGGLE_STAR',
-              id: todo.id,
+              id: todo.id
             });
 
           }}
@@ -274,20 +336,28 @@ export function TodoItem({ todo }: Props) {
 
           <Star
             size={15}
-            fill={todo.starred ? 'currentColor' : 'none'}
+            fill={
+              todo.starred
+                ? 'currentColor'
+                : 'none'
+            }
           />
 
         </button>
 
       </div>
 
-      {/* EXPANDED DETAIL */}
+      {/* DETAIL */}
 
       {expanded && (
 
         <div
           className="todo-detail"
-          onClick={e => e.stopPropagation()}
+          onClick={(e) => {
+
+            e.stopPropagation();
+
+          }}
         >
 
           {/* STEPS */}
@@ -302,7 +372,8 @@ export function TodoItem({ todo }: Props) {
 
                 <span className="td-count">
 
-                  {completedSteps}/{todo.steps.length}
+                  {completedSteps}/
+                  {todo.steps.length}
 
                 </span>
 
@@ -314,18 +385,28 @@ export function TodoItem({ todo }: Props) {
 
               <div
                 key={step.id}
-                className={`step-item ${step.completed ? 'step-item--done' : ''}`}
+                className={`step-item ${
+                  step.completed
+                    ? 'step-item--done'
+                    : ''
+                }`}
               >
 
                 <button
-                  className={`step-check ${step.completed ? 'step-check--checked' : ''}`}
-                  onClick={() =>
+                  className={`step-check ${
+                    step.completed
+                      ? 'step-check--checked'
+                      : ''
+                  }`}
+                  onClick={() => {
+
                     dispatch({
                       type: 'TOGGLE_STEP',
                       todoId: todo.id,
-                      stepId: step.id,
-                    })
-                  }
+                      stepId: step.id
+                    });
+
+                  }}
                 />
 
                 <span className="step-text">
@@ -336,13 +417,15 @@ export function TodoItem({ todo }: Props) {
 
                 <button
                   className="step-delete"
-                  onClick={() =>
+                  onClick={() => {
+
                     dispatch({
                       type: 'DELETE_STEP',
                       todoId: todo.id,
-                      stepId: step.id,
-                    })
-                  }
+                      stepId: step.id
+                    });
+
+                  }}
                 >
 
                   <X size={11} />
@@ -361,8 +444,12 @@ export function TodoItem({ todo }: Props) {
                 className="add-step-input"
                 placeholder="Add a step..."
                 value={newStep}
-                onChange={e => setNewStep(e.target.value)}
-                onKeyDown={e => {
+                onChange={(e) => {
+
+                  setNewStep(e.target.value);
+
+                }}
+                onKeyDown={(e) => {
 
                   if (e.key === 'Enter') {
                     addStep();
@@ -372,210 +459,6 @@ export function TodoItem({ todo }: Props) {
               />
 
             </div>
-
-          </div>
-
-          {/* PRIORITY */}
-
-          <div className="td-section">
-
-            <div className="td-section-header">
-
-              <Flag size={12} />
-
-              <span>Priority</span>
-
-            </div>
-
-            <div className="priority-pills">
-
-              {priorityConfig.map(opt => (
-
-                <button
-                  key={opt.value}
-                  className={`priority-pill ${todo.priority === opt.value ? 'priority-pill--active' : ''}`}
-                  style={
-                    {
-                      '--p': opt.color
-                    } as React.CSSProperties
-                  }
-                  onClick={() =>
-                    dispatch({
-                      type: 'UPDATE_TODO',
-                      id: todo.id,
-                      updates: {
-                        priority: opt.value,
-                      },
-                    })
-                  }
-                >
-
-                  {opt.label}
-
-                </button>
-
-              ))}
-
-            </div>
-
-          </div>
-
-          {/* DUE DATE */}
-
-          <div className="td-section">
-
-            <div className="td-section-header">
-
-              <Calendar size={12} />
-
-              <span>Due date</span>
-
-            </div>
-
-            <input
-              type="date"
-              className="detail-input"
-              value={todo.dueDate || ''}
-              onChange={e =>
-                dispatch({
-                  type: 'UPDATE_TODO',
-                  id: todo.id,
-                  updates: {
-                    dueDate: e.target.value || undefined,
-                  },
-                })
-              }
-            />
-
-          </div>
-
-          {/* TAGS */}
-
-          <div className="td-section">
-
-            <div className="td-section-header">
-
-              <Tag size={12} />
-
-              <span>Tags</span>
-
-            </div>
-
-            <div className="tags-list">
-
-              {todo.tags.map(tag => (
-
-                <span
-                  key={tag}
-                  className="detail-tag"
-                >
-
-                  #{tag}
-
-                  <button
-                    onClick={() =>
-                      dispatch({
-                        type: 'UPDATE_TODO',
-                        id: todo.id,
-                        updates: {
-                          tags: todo.tags.filter(
-                            t => t !== tag
-                          ),
-                        },
-                      })
-                    }
-                  >
-
-                    <X size={10} />
-
-                  </button>
-
-                </span>
-
-              ))}
-
-            </div>
-
-            <input
-              className="add-tag-input"
-              placeholder="Add tag..."
-              value={newTag}
-              onChange={e => setNewTag(e.target.value)}
-              onKeyDown={e => {
-
-                if (e.key === 'Enter') {
-                  addTag();
-                }
-
-              }}
-            />
-
-          </div>
-
-          {/* NOTES */}
-
-          <div className="td-section">
-
-            <div className="td-section-header">
-
-              <StickyNote size={12} />
-
-              <span>Notes</span>
-
-            </div>
-
-            <textarea
-              className="notes-input"
-              placeholder="Add a note..."
-              value={todo.notes}
-              rows={2}
-              onChange={e =>
-                dispatch({
-                  type: 'UPDATE_TODO',
-                  id: todo.id,
-                  updates: {
-                    notes: e.target.value,
-                  },
-                })
-              }
-            />
-
-          </div>
-
-          {/* FOOTER */}
-
-          <div className="td-footer">
-
-            <span className="detail-created">
-
-              Created{' '}
-
-              {new Date(todo.createdAt).toLocaleDateString(
-                'en-US',
-                {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                }
-              )}
-
-            </span>
-
-            <button
-              className="detail-delete"
-              onClick={() =>
-                dispatch({
-                  type: 'DELETE_TODO',
-                  id: todo.id,
-                })
-              }
-            >
-
-              <Trash2 size={13} />
-
-              Delete
-
-            </button>
 
           </div>
 

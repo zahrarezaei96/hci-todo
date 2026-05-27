@@ -825,3 +825,8 @@ input, textarea, select { font-family: inherit; }
   transition: all 0.1s ease;
   box-shadow: 0 0 20px rgba(124, 58, 237, 0.5);
 }
+
+.gaze-check-hover {
+  box-shadow: 0 0 18px #00ff88;
+  transform: scale(1.15);
+}

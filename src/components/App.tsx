@@ -20,7 +20,7 @@ export function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  // DEBUG PUNTO SGUARDO
+  // DEBUG DOT
   const [gazePoint, setGazePoint] = useState({
     x: window.innerWidth / 2,
     y: window.innerHeight / 2,
@@ -28,7 +28,23 @@ export function App() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // load profile
+  // HOVER TRACKING
+  const hoveredTodoRef = useRef<HTMLElement | null>(null);
+
+  // TEMPO SGUARDO
+  const hoverTimeRef = useRef(0);
+
+  // TEMPO FRAME
+  const lastFrameRef = useRef(Date.now());
+
+  // COOLDOWN CLICK
+  const clickCooldownRef = useRef(false);
+
+  // SMOOTHING
+  const smoothX = useRef(window.innerWidth / 2);
+  const smoothY = useRef(window.innerHeight / 2);
+
+  // LOAD PROFILE
   useEffect(() => {
 
     const saved = localStorage.getItem('focus-profile');
@@ -46,17 +62,9 @@ export function App() {
   // FACEMESH
   useEffect(() => {
 
-    console.log('FaceMesh effect started');
+    console.log('FaceMesh started');
 
-    if (!videoRef.current) {
-
-      console.log('videoRef NULL');
-
-      return;
-
-    }
-
-    console.log('videoRef OK');
+    if (!videoRef.current) return;
 
     let running = true;
 
@@ -87,12 +95,27 @@ export function App() {
 
       const landmarks = results.multiFaceLandmarks[0];
 
-      // PUNTA NASO
+      // NASO
       const nose = landmarks[1];
 
-      // COORDINATE SCHERMO
-      const screenX = window.innerWidth * (1 - nose.x);
-      const screenY = window.innerHeight * nose.y;
+      // SCREEN COORDS
+      const targetX =
+        window.innerWidth * (1 - nose.x);
+
+      const targetY =
+        window.innerHeight * nose.y;
+
+      // SMOOTHING
+      smoothX.current =
+        smoothX.current * 0.7 +
+        targetX * 0.3;
+
+      smoothY.current =
+        smoothY.current * 0.7 +
+        targetY * 0.3;
+
+      const screenX = smoothX.current;
+      const screenY = smoothY.current;
 
       // DEBUG DOT
       setGazePoint({
@@ -100,24 +123,23 @@ export function App() {
         y: screenY,
       });
 
-      // RESET HOVER TASK
-      const elements = document.querySelectorAll(
-        '.todo-item-wrap'
-      );
+      // REMOVE OLD HOVER
+      document
+        .querySelectorAll('.todo-item-wrap')
+        .forEach((el) => {
 
-      elements.forEach((el) => {
+          (el as HTMLElement)
+            .classList
+            .remove('gaze-hover');
 
-        const htmlEl = el as HTMLElement;
+        });
 
-        htmlEl.classList.remove('gaze-hover');
-
-      });
-
-      // TASK GUARDATA
-      const target = document.elementFromPoint(
-        screenX,
-        screenY
-      );
+      // TARGET
+      const target =
+        document.elementFromPoint(
+          screenX,
+          screenY
+        );
 
       if (!target) return;
 
@@ -125,9 +147,70 @@ export function App() {
         '.todo-item-wrap'
       ) as HTMLElement | null;
 
-      if (todo) {
+      if (!todo) {
 
-        todo.classList.add('gaze-hover');
+        hoveredTodoRef.current = null;
+        hoverTimeRef.current = 0;
+
+        return;
+
+      }
+
+      // VISUAL HOVER
+      todo.classList.add('gaze-hover');
+
+      // DELTA TIME
+      const now = Date.now();
+
+      const delta =
+        now - lastFrameRef.current;
+
+      lastFrameRef.current = now;
+
+      // STESSA TASK
+      if (hoveredTodoRef.current === todo) {
+
+        hoverTimeRef.current += delta;
+
+      } else {
+
+        hoveredTodoRef.current = todo;
+
+        hoverTimeRef.current = 0;
+
+      }
+
+      // CHECK DOPO 2.4 SECONDI
+      if (
+        hoverTimeRef.current > 2400 &&
+        !clickCooldownRef.current
+      ) {
+
+        clickCooldownRef.current = true;
+
+        const checkBtn = todo.querySelector(
+          '[data-check-button="true"]'
+        ) as HTMLElement | null;
+
+        if (checkBtn) {
+
+          checkBtn.dispatchEvent(
+            new MouseEvent('click', {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+            })
+          );
+
+        }
+
+        hoverTimeRef.current = 0;
+
+        setTimeout(() => {
+
+          clickCooldownRef.current = false;
+
+        }, 1500);
 
       }
 
@@ -176,7 +259,10 @@ export function App() {
       })
       .catch((err) => {
 
-        console.error('Webcam error:', err);
+        console.error(
+          'Webcam error:',
+          err
+        );
 
       });
 
@@ -185,15 +271,20 @@ export function App() {
       running = false;
 
       const stream =
-        videoRef.current?.srcObject as MediaStream | null;
+        videoRef.current
+          ?.srcObject as MediaStream | null;
 
-      stream?.getTracks().forEach(track => track.stop());
+      stream
+        ?.getTracks()
+        .forEach(track => track.stop());
 
     };
 
   }, []);
 
-  function handleOnboarding(p: Profile) {
+  function handleOnboarding(
+    p: Profile
+  ) {
 
     localStorage.setItem(
       'focus-profile',
@@ -208,6 +299,7 @@ export function App() {
 
     <>
       {/* DEBUG DOT */}
+
       <div
         style={{
 
@@ -233,6 +325,7 @@ export function App() {
       />
 
       {/* VIDEO */}
+
       <video
         ref={videoRef}
         autoPlay
@@ -245,7 +338,11 @@ export function App() {
 
       {!loaded ? null : !profile ? (
 
-        <Onboarding onComplete={handleOnboarding} />
+        <Onboarding
+          onComplete={
+            handleOnboarding
+          }
+        />
 
       ) : (
 
@@ -276,7 +373,9 @@ export function App() {
         </div>
 
       )}
+
     </>
 
   );
+
 }
