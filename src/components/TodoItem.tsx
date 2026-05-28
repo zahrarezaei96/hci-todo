@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Todo, Priority } from '../types';
 import { useStore } from '../store';
 import { Star, Calendar, Flag, X, Plus, Trash2, Tag, StickyNote } from 'lucide-react';
+import GestureDateControl from "./GestureDateControl";
 
 const priorityConfig: { value: Priority; label: string; color: string }[] = [
   { value: 'low', label: 'Low', color: '#4ade80' },
@@ -154,6 +155,10 @@ export function TodoItem({ todo }: Props) {
             <div className="td-section-header"><Calendar size={12} /><span>Due date</span></div>
             <input type="date" className="detail-input" value={todo.dueDate || ''}
               onChange={e => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { dueDate: e.target.value || undefined } })} />
+              <GestureDateControl
+  onNextDate={() => console.log("Next date")}
+  onPreviousDate={() => console.log("Previous date")}
+/>
           </div>
 
           {/* Tags */}
