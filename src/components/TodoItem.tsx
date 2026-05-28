@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Todo, Priority } from '../types';
 import { useStore } from '../store';
 import { Star, Calendar, Flag, X, Plus, Trash2, Tag, StickyNote } from 'lucide-react';
-import GestureDateControl from "./GestureDateControl";
+import GestureDateControl from "./GestureDateControl";  
 
 const priorityConfig: { value: Priority; label: string; color: string }[] = [
   { value: 'low', label: 'Low', color: '#4ade80' },
@@ -156,8 +156,65 @@ export function TodoItem({ todo }: Props) {
             <input type="date" className="detail-input" value={todo.dueDate || ''}
               onChange={e => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { dueDate: e.target.value || undefined } })} />
               <GestureDateControl
-  onNextDate={() => console.log("Next date")}
-  onPreviousDate={() => console.log("Previous date")}
+  onSwipeRight={() => {
+    const baseDate = todo.dueDate || new Date().toISOString().split('T')[0];
+    const currentDate = new Date(baseDate + 'T00:00:00');
+
+    currentDate.setDate(currentDate.getDate() + 1);
+
+    dispatch({
+      type: 'UPDATE_TODO',
+      id: todo.id,
+      updates: {
+        dueDate: currentDate.toISOString().split('T')[0],
+      },
+    });
+  }}
+
+  onSwipeLeft={() => {
+    const baseDate = todo.dueDate || new Date().toISOString().split('T')[0];
+    const currentDate = new Date(baseDate + 'T00:00:00');
+
+    currentDate.setDate(currentDate.getDate() - 1);
+
+    dispatch({
+      type: 'UPDATE_TODO',
+      id: todo.id,
+      updates: {
+        dueDate: currentDate.toISOString().split('T')[0],
+      },
+    });
+  }}
+
+  onSwipeUp={() => {
+    const baseDate = todo.dueDate || new Date().toISOString().split('T')[0];
+    const currentDate = new Date(baseDate + 'T00:00:00');
+
+    currentDate.setDate(currentDate.getDate() - 7);
+
+    dispatch({
+      type: 'UPDATE_TODO',
+      id: todo.id,
+      updates: {
+        dueDate: currentDate.toISOString().split('T')[0],
+      },
+    });
+  }}
+
+  onSwipeDown={() => {
+    const baseDate = todo.dueDate || new Date().toISOString().split('T')[0];
+    const currentDate = new Date(baseDate + 'T00:00:00');
+
+    currentDate.setDate(currentDate.getDate() + 7);
+
+    dispatch({
+      type: 'UPDATE_TODO',
+      id: todo.id,
+      updates: {
+        dueDate: currentDate.toISOString().split('T')[0],
+      },
+    });
+  }}
 />
           </div>
 

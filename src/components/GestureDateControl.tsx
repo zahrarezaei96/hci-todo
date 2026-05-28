@@ -3,13 +3,21 @@ import { Hands } from "@mediapipe/hands";
 import { Camera } from "@mediapipe/camera_utils";
 
 type Props = {
-  onNextDate: () => void;
-  onPreviousDate: () => void;
+  onSwipeUp?: () => void;
+  onSwipeDown?: () => void;
+  onSwipeLeft?: () => void;
+  onSwipeRight?: () => void;
 };
 
-export default function GestureDateControl({ onNextDate, onPreviousDate }: Props) {
+export default function GestureDateControl({
+  onSwipeUp,
+  onSwipeDown,
+  onSwipeLeft,
+  onSwipeRight,
+}: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const lastXRef = useRef<number | null>(null);
+  const lastYRef = useRef<number | null>(null);
   const lastGestureTimeRef = useRef<number>(0);
 
   const [gestureMode, setGestureMode] = useState(false);
@@ -19,7 +27,7 @@ export default function GestureDateControl({ onNextDate, onPreviousDate }: Props
     if (!gestureMode || !videoRef.current) return;
 
     const hands = new Hands({
-      locateFile: (file) =>
+      locateFile: file =>
         `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
     });
 
@@ -30,38 +38,51 @@ export default function GestureDateControl({ onNextDate, onPreviousDate }: Props
       minTrackingConfidence: 0.7,
     });
 
-    hands.onResults((results) => {
+    hands.onResults(results => {
       if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
         setStatus("No hand detected");
         return;
       }
 
-      setStatus("Hand detected");
-
       const wrist = results.multiHandLandmarks[0][0];
       const currentX = wrist.x;
+      const currentY = wrist.y;
+
       const previousX = lastXRef.current;
+      const previousY = lastYRef.current;
 
-      if (previousX !== null) {
-        const movement = currentX - previousX;
+      if (previousX !== null && previousY !== null) {
+        const movementX = currentX - previousX;
+        const movementY = currentY - previousY;
         const now = Date.now();
+if (now - lastGestureTimeRef.current > 800) {
+  const absX = Math.abs(movementX);
+  const absY = Math.abs(movementY);
 
-        if (now - lastGestureTimeRef.current > 1000) {
-          if (movement > 0.12) {
-            setStatus("Swipe right → next date");
-            onNextDate();
-            lastGestureTimeRef.current = now;
-          }
-
-          if (movement < -0.12) {
-            setStatus("Swipe left → previous date");
-            onPreviousDate();
-            lastGestureTimeRef.current = now;
-          }
-        }
+  if (absY > absX && movementY < -0.08) {
+    setStatus("Swipe up detected ↑");
+    onSwipeUp?.();
+    lastGestureTimeRef.current = now;
+  } else if (absY > absX && movementY > 0.08) {
+    setStatus("Swipe down detected ↓");
+    onSwipeDown?.();
+    lastGestureTimeRef.current = now;
+  } else if (absX > absY && movementX > 0.08) {
+    setStatus("Swipe right detected → next date");
+    onSwipeRight?.();
+    lastGestureTimeRef.current = now;
+  } else if (absX > absY && movementX < -0.08) {
+    setStatus("Swipe left detected → previous date");
+    onSwipeLeft?.();
+    lastGestureTimeRef.current = now;
+  } else {
+    setStatus("Hand detected");
+  }
+}
       }
 
       lastXRef.current = currentX;
+      lastYRef.current = currentY;
     });
 
     const camera = new Camera(videoRef.current, {
@@ -80,7 +101,7 @@ export default function GestureDateControl({ onNextDate, onPreviousDate }: Props
       camera.stop();
       hands.close();
     };
-  }, [gestureMode, onNextDate, onPreviousDate]);
+  }, [gestureMode, onSwipeUp, onSwipeDown, onSwipeLeft, onSwipeRight]);
 
   return (
     <div className="gesture-panel">
@@ -93,7 +114,11 @@ export default function GestureDateControl({ onNextDate, onPreviousDate }: Props
       {gestureMode && (
         <video
           ref={videoRef}
-          style={{ width: "160px", borderRadius: "12px", marginTop: "8px" }}
+          style={{
+            width: "160px",
+            borderRadius: "12px",
+            marginTop: "8px",
+          }}
         />
       )}
     </div>
