@@ -140,8 +140,10 @@ export function DetailPanel() {
 />
 
 <GestureDateControl
-  onNextDate={() => console.log("Next date")}
-  onPreviousDate={() => console.log("Previous date")}
+  onSwipeRight={() => console.log("Swipe right")}
+  onSwipeLeft={() => console.log("Swipe left")}
+  onSwipeUp={() => console.log("Swipe up")}
+  onSwipeDown={() => console.log("Swipe down")}
 />
         </div>
 
