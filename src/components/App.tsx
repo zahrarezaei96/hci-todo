@@ -5,6 +5,8 @@ import { useStore } from '../store';
 import { Sidebar } from './Sidebar';
 import { MainContent } from './MainContent';
 import { Onboarding } from './Onboarding';
+import { CalibrationOverlay } from './CalibrationOverlay';
+import { AffineTransform, applyTransform } from './useCalibration';
 
 interface Profile {
   name: string;
@@ -22,6 +24,20 @@ export function App() {
 
   const [loaded, setLoaded] =
     useState(false);
+
+  // CALIBRAZIONE
+  const [showCalibration, setShowCalibration] =
+    useState(false);
+
+  const [calibrationDone, setCalibrationDone] =
+    useState(false);
+
+  const transformRef =
+    useRef<AffineTransform | null>(null);
+
+  // Iris grezza passata a CalibrationOverlay
+  const [rawIris, setRawIris] =
+    useState({ x: 0.5, y: 0.5 });
 
   // DEBUG DOT
   const [gazePoint, setGazePoint] =
@@ -47,17 +63,13 @@ export function App() {
     useRef(false);
 
   // SMOOTHING
-  const smoothX =
-    useRef(window.innerWidth / 2);
-
-  const smoothY =
-    useRef(window.innerHeight / 2);
+  const smoothX = useRef(window.innerWidth / 2);
+  const smoothY = useRef(window.innerHeight / 2);
 
   // LOAD PROFILE
   useEffect(() => {
 
-    const saved =
-      localStorage.getItem('focus-profile');
+    const saved = localStorage.getItem('focus-profile');
 
     if (saved) {
       setProfile(JSON.parse(saved));
@@ -95,25 +107,55 @@ export function App() {
       const landmarks = results.multiFaceLandmarks[0];
 
       // LANDMARK SELECTION
-      // landmarks[1]   = nose tip  → head tracking (original)
-      // landmarks[468] = left iris center  → true eye tracking (con refineLandmarks: true)
-      // landmarks[473] = right iris center → true eye tracking (con refineLandmarks: true)
-      // Media degli iris per punto di gaze più stabile:
       const leftIris  = landmarks[468];
       const rightIris = landmarks[473];
+      const leftEye   = landmarks[33];
+      const rightEye  = landmarks[263];
 
-      const gaze = {
-        x: (leftIris.x + rightIris.x) / 2,
-        y: (leftIris.y + rightIris.y) / 2,
-      };
+      // Offset iris rispetto al centro della testa
+      const headCenterX = (leftEye.x + rightEye.x) / 2;
+      const headCenterY = (leftEye.y + rightEye.y) / 2;
 
-      // SCREEN COORDS
-      const targetX = window.innerWidth  * (1 - gaze.x);
-      const targetY = window.innerHeight * gaze.y;
+      const irisX = ((leftIris.x + rightIris.x) / 2) - headCenterX;
+      const irisY = ((leftIris.y + rightIris.y) / 2) - headCenterY;
 
-      // SMOOTHING (0.8/0.2 = più lento ma più stabile; abbassa a 0.6/0.4 per più reattività)
-      smoothX.current = smoothX.current * 0.8 + targetX * 0.2;
-      smoothY.current = smoothY.current * 0.8 + targetY * 0.2;
+      // Aggiorna iris grezza per CalibrationOverlay
+      setRawIris({ x: irisX, y: irisY });
+
+      // CALCOLO POSIZIONE SCHERMO
+      let targetX: number;
+      let targetY: number;
+
+      if (transformRef.current) {
+        // Con calibrazione: trasformazione affine
+        const p = applyTransform(transformRef.current, irisX, irisY);
+        targetX = p.x;
+        targetY = p.y;
+      } else {
+        // Senza calibrazione: fallback sensitivity fissa
+        const sensitivity = 50;
+        targetX = window.innerWidth  * (0.5 - irisX * sensitivity);
+        targetY = window.innerHeight * (0.5 + irisY * sensitivity);
+      }
+
+      // CLAMP ai bordi dello schermo
+      targetX = Math.max(0, Math.min(window.innerWidth,  targetX));
+      targetY = Math.max(0, Math.min(window.innerHeight, targetY));
+
+      // SMOOTHING ADATTIVO
+      // Movimenti grandi (saccadi intenzionali) → meno smoothing, più reattività
+      // Movimenti piccoli (microtremori)         → più smoothing, più stabilità
+      const dx   = targetX - smoothX.current;
+      const dy   = targetY - smoothY.current;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      const alpha =
+        dist > 200 ? 0.3  :  // salto grande: segui velocemente
+        dist > 80  ? 0.15 :  // movimento medio
+                     0.06;   // microtremore: ignora quasi tutto
+
+      smoothX.current = smoothX.current * (1 - alpha) + targetX * alpha;
+      smoothY.current = smoothY.current * (1 - alpha) + targetY * alpha;
 
       const screenX = smoothX.current;
       const screenY = smoothY.current;
@@ -121,69 +163,66 @@ export function App() {
       // DEBUG DOT
       setGazePoint({ x: screenX, y: screenY });
 
+      // Non processare click durante la calibrazione
+      if (showCalibration) return;
+
       // TARGET
       const target = document.elementFromPoint(screenX, screenY) as HTMLElement | null;
 
       if (!target) return;
 
-      // RESET HOVER su tutti gli item
+      // RESET HOVER
       document.querySelectorAll('.todo-item-wrap').forEach((el) => {
         (el as HTMLElement).classList.remove('gaze-hover');
       });
 
-      // --- RISOLTO BUG #1: selettori corretti per Sidebar ---
-
-      // CHECK BUTTON (TodoItem: data-check-button="true")
+      // CHECK BUTTON
       const checkBtn = target.closest(
         '[data-check-button="true"]'
       ) as HTMLElement | null;
 
-      // TODO ITEM WRAP — FIX: il click per espandere va sul wrapper, non su .todo-body
+      // TODO ITEM WRAP
       const todoWrap = target.closest(
         '.todo-item-wrap'
       ) as HTMLElement | null;
 
-      // .todo-body è usato solo per capire se siamo sull'area testo,
-      // ma il click viene sparato sul wrapper
       const todoBody = target.closest(
         '.todo-body'
       ) as HTMLElement | null;
 
-      // SIDEBAR NAV — FIX: era data-sidebar-item, ora data-gaze-nav
+      // SIDEBAR NAV
       const sidebarItem = target.closest(
         '[data-gaze-nav="true"]'
       ) as HTMLElement | null;
 
-      // NEW LIST BUTTON — FIX: era data-new-list-button, ora data-gaze-new-list
+      // NEW LIST BUTTON
       const newListBtn = target.closest(
         '[data-gaze-new-list="true"]'
       ) as HTMLElement | null;
 
-      // VISUAL FEEDBACK sul todo wrap
+      // VISUAL FEEDBACK
       if (todoWrap) {
         todoWrap.classList.add('gaze-hover');
       }
 
-      // --- RISOLTO BUG #2: delta calcolato solo quando c'è un elemento valido ---
       const currentElement =
         checkBtn ||
-        (todoBody && todoWrap ? todoWrap : null) ||  // usa il wrapper come target del click
+        (todoBody && todoWrap ? todoWrap : null) ||
         sidebarItem ||
         newListBtn;
 
       if (!currentElement) {
         hoveredElementRef.current = null;
-        hoverTimeRef.current     = 0;
-        lastFrameRef.current     = Date.now(); // reset anche qui per evitare delta spike
+        hoverTimeRef.current      = 0;
+        lastFrameRef.current      = Date.now();
         return;
       }
 
-      // TIMER — delta calcolato solo qui, quando c'è un elemento valido
+      // TIMER
       const now   = Date.now();
       const delta = now - lastFrameRef.current;
       lastFrameRef.current = now;
 
-      // SAME ELEMENT
       if (hoveredElementRef.current === currentElement) {
         hoverTimeRef.current += delta;
       } else {
@@ -194,9 +233,7 @@ export function App() {
       // COOLDOWN
       if (clickCooldownRef.current) return;
 
-      // -------------------
       // SIDEBAR ITEM
-      // -------------------
       if (
         sidebarItem &&
         currentElement === sidebarItem &&
@@ -208,9 +245,7 @@ export function App() {
         setTimeout(() => { clickCooldownRef.current = false; }, 1500);
       }
 
-      // -------------------
       // NEW LIST BUTTON
-      // -------------------
       if (
         newListBtn &&
         currentElement === newListBtn &&
@@ -222,14 +257,12 @@ export function App() {
         setTimeout(() => { clickCooldownRef.current = false; }, 1500);
       }
 
-      // -------------------
-      // OPEN TASK — FIX: click su todoWrap, non su .todo-body
-      // -------------------
+      // OPEN TASK
       if (
         todoBody &&
         todoWrap &&
         currentElement === todoWrap &&
-        !checkBtn &&                  // evita di aprire mentre si punta al check
+        !checkBtn &&
         hoverTimeRef.current > 800
       ) {
         clickCooldownRef.current = true;
@@ -238,9 +271,7 @@ export function App() {
         setTimeout(() => { clickCooldownRef.current = false; }, 1500);
       }
 
-      // -------------------
       // COMPLETE TASK
-      // -------------------
       if (
         checkBtn &&
         currentElement === checkBtn &&
@@ -298,11 +329,18 @@ export function App() {
       stream?.getTracks().forEach((track) => track.stop());
     };
 
-  }, []);
+  }, [showCalibration]);
 
   function handleOnboarding(p: Profile) {
     localStorage.setItem('focus-profile', JSON.stringify(p));
     setProfile(p);
+    setShowCalibration(true);
+  }
+
+  function handleCalibrationComplete(transform: AffineTransform) {
+    transformRef.current = transform;
+    setCalibrationDone(true);
+    setShowCalibration(false);
   }
 
   return (
@@ -310,16 +348,16 @@ export function App() {
       {/* DEBUG DOT */}
       <div
         style={{
-          position: 'fixed',
-          left: gazePoint.x - 8,
-          top: gazePoint.y - 8,
-          width: 16,
-          height: 16,
-          borderRadius: '50%',
-          background: 'red',
-          zIndex: 999999,
+          position:      'fixed',
+          left:          gazePoint.x - 8,
+          top:           gazePoint.y - 8,
+          width:         16,
+          height:        16,
+          borderRadius:  '50%',
+          background:    'red',
+          zIndex:        999999,
           pointerEvents: 'none',
-          boxShadow: '0 0 20px red',
+          boxShadow:     '0 0 20px red',
         }}
       />
 
@@ -331,6 +369,16 @@ export function App() {
         muted
         style={{ display: 'none' }}
       />
+
+      {/* CALIBRAZIONE */}
+      {showCalibration && (
+        <CalibrationOverlay
+          irisX={rawIris.x}
+          irisY={rawIris.y}
+          onComplete={handleCalibrationComplete}
+          onSkip={() => setShowCalibration(false)}
+        />
+      )}
 
       {!loaded ? null : !profile ? (
 
@@ -351,6 +399,27 @@ export function App() {
             }}
           />
           <MainContent />
+
+          {/* Bottone ricalibrazione */}
+          <button
+            onClick={() => setShowCalibration(true)}
+            style={{
+              position:     'fixed',
+              bottom:       16,
+              right:        16,
+              padding:      '8px 14px',
+              background:   calibrationDone ? '#107c10' : '#ca5010',
+              border:       'none',
+              borderRadius: 8,
+              color:        '#fff',
+              fontSize:     12,
+              cursor:       'pointer',
+              zIndex:       9999,
+              opacity:      0.8,
+            }}
+          >
+            {calibrationDone ? '✓ Recalibrate' : 'Calibrate'}
+          </button>
         </div>
 
       )}
