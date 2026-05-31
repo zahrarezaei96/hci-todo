@@ -57,14 +57,10 @@ export function App() {
   useEffect(() => {
 
     const saved =
-      localStorage.getItem(
-        'focus-profile'
-      );
+      localStorage.getItem('focus-profile');
 
     if (saved) {
-
       setProfile(JSON.parse(saved));
-
     }
 
     setLoaded(true);
@@ -80,426 +76,284 @@ export function App() {
 
     let running = true;
 
-    const faceMesh =
-      new FaceMesh({
-
-        locateFile: (file) => {
-
-          return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`;
-
-        }
-
-      });
+    const faceMesh = new FaceMesh({
+      locateFile: (file) =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+    });
 
     faceMesh.setOptions({
-
       maxNumFaces: 1,
-
       refineLandmarks: true,
-
       minDetectionConfidence: 0.7,
       minTrackingConfidence: 0.7,
-
     });
 
     faceMesh.onResults((results) => {
 
-      if (
-        !results.multiFaceLandmarks
-          ?.length
-      ) return;
+      if (!results.multiFaceLandmarks?.length) return;
 
-      const landmarks =
-        results.multiFaceLandmarks[0];
+      const landmarks = results.multiFaceLandmarks[0];
 
-      // NASO
-      const nose =
-        landmarks[1];
+      // LANDMARK SELECTION
+      // landmarks[1]   = nose tip  → head tracking (original)
+      // landmarks[468] = left iris center  → true eye tracking (con refineLandmarks: true)
+      // landmarks[473] = right iris center → true eye tracking (con refineLandmarks: true)
+      // Media degli iris per punto di gaze più stabile:
+      const leftIris  = landmarks[468];
+      const rightIris = landmarks[473];
+
+      const gaze = {
+        x: (leftIris.x + rightIris.x) / 2,
+        y: (leftIris.y + rightIris.y) / 2,
+      };
 
       // SCREEN COORDS
-      const targetX =
-        window.innerWidth *
-        (1 - nose.x);
+      const targetX = window.innerWidth  * (1 - gaze.x);
+      const targetY = window.innerHeight * gaze.y;
 
-      const targetY =
-        window.innerHeight *
-        nose.y;
+      // SMOOTHING (0.8/0.2 = più lento ma più stabile; abbassa a 0.6/0.4 per più reattività)
+      smoothX.current = smoothX.current * 0.8 + targetX * 0.2;
+      smoothY.current = smoothY.current * 0.8 + targetY * 0.2;
 
-      // SMOOTHING
-      smoothX.current =
-        smoothX.current * 0.7 +
-        targetX * 0.3;
-
-      smoothY.current =
-        smoothY.current * 0.7 +
-        targetY * 0.3;
-
-      const screenX =
-        smoothX.current;
-
-      const screenY =
-        smoothY.current;
+      const screenX = smoothX.current;
+      const screenY = smoothY.current;
 
       // DEBUG DOT
-      setGazePoint({
-        x: screenX,
-        y: screenY,
-      });
+      setGazePoint({ x: screenX, y: screenY });
 
       // TARGET
-      const target =
-        document.elementFromPoint(
-          screenX,
-          screenY
-        ) as HTMLElement | null;
+      const target = document.elementFromPoint(screenX, screenY) as HTMLElement | null;
 
       if (!target) return;
 
-      // RESET HOVER
-      document
-        .querySelectorAll(
-          '.todo-item-wrap'
-        )
-        .forEach((el) => {
+      // RESET HOVER su tutti gli item
+      document.querySelectorAll('.todo-item-wrap').forEach((el) => {
+        (el as HTMLElement).classList.remove('gaze-hover');
+      });
 
-          (
-            el as HTMLElement
-          ).classList.remove(
-            'gaze-hover'
-          );
+      // --- RISOLTO BUG #1: selettori corretti per Sidebar ---
 
-        });
+      // CHECK BUTTON (TodoItem: data-check-button="true")
+      const checkBtn = target.closest(
+        '[data-check-button="true"]'
+      ) as HTMLElement | null;
 
-      // TODO
-      const todo =
-        target.closest(
-          '.todo-item-wrap'
-        ) as HTMLElement | null;
+      // TODO ITEM WRAP — FIX: il click per espandere va sul wrapper, non su .todo-body
+      const todoWrap = target.closest(
+        '.todo-item-wrap'
+      ) as HTMLElement | null;
 
-      if (!todo) {
+      // .todo-body è usato solo per capire se siamo sull'area testo,
+      // ma il click viene sparato sul wrapper
+      const todoBody = target.closest(
+        '.todo-body'
+      ) as HTMLElement | null;
 
-        hoveredElementRef.current =
-          null;
+      // SIDEBAR NAV — FIX: era data-sidebar-item, ora data-gaze-nav
+      const sidebarItem = target.closest(
+        '[data-gaze-nav="true"]'
+      ) as HTMLElement | null;
 
-        hoverTimeRef.current = 0;
+      // NEW LIST BUTTON — FIX: era data-new-list-button, ora data-gaze-new-list
+      const newListBtn = target.closest(
+        '[data-gaze-new-list="true"]'
+      ) as HTMLElement | null;
 
-        return;
-
+      // VISUAL FEEDBACK sul todo wrap
+      if (todoWrap) {
+        todoWrap.classList.add('gaze-hover');
       }
 
-      // VISUAL
-      todo.classList.add(
-        'gaze-hover'
-      );
-
-      // CHECK BUTTON
-      const checkBtn =
-        target.closest(
-          '[data-check-button="true"]'
-        ) as HTMLElement | null;
-
-      // BODY
-      const body =
-        target.closest(
-          '.todo-body'
-        ) as HTMLElement | null;
-
-      // TIMER
-      const now =
-        Date.now();
-
-      const delta =
-        now -
-        lastFrameRef.current;
-
-      lastFrameRef.current =
-        now;
-
-      // CURRENT ELEMENT
+      // --- RISOLTO BUG #2: delta calcolato solo quando c'è un elemento valido ---
       const currentElement =
-        checkBtn || body;
+        checkBtn ||
+        (todoBody && todoWrap ? todoWrap : null) ||  // usa il wrapper come target del click
+        sidebarItem ||
+        newListBtn;
 
       if (!currentElement) {
-
-        hoveredElementRef.current =
-          null;
-
-        hoverTimeRef.current = 0;
-
+        hoveredElementRef.current = null;
+        hoverTimeRef.current     = 0;
+        lastFrameRef.current     = Date.now(); // reset anche qui per evitare delta spike
         return;
-
       }
 
+      // TIMER — delta calcolato solo qui, quando c'è un elemento valido
+      const now   = Date.now();
+      const delta = now - lastFrameRef.current;
+      lastFrameRef.current = now;
+
       // SAME ELEMENT
-      if (
-        hoveredElementRef.current ===
-        currentElement
-      ) {
-
-        hoverTimeRef.current +=
-          delta;
-
+      if (hoveredElementRef.current === currentElement) {
+        hoverTimeRef.current += delta;
       } else {
-
-        hoveredElementRef.current =
-          currentElement;
-
-        hoverTimeRef.current = 0;
-
+        hoveredElementRef.current = currentElement;
+        hoverTimeRef.current      = 0;
       }
 
       // COOLDOWN
-      if (
-        clickCooldownRef.current
-      ) return;
+      if (clickCooldownRef.current) return;
 
       // -------------------
-      // OPEN TASK
+      // SIDEBAR ITEM
       // -------------------
-
       if (
-        body &&
-        currentElement === body &&
+        sidebarItem &&
+        currentElement === sidebarItem &&
+        hoverTimeRef.current > 1000
+      ) {
+        clickCooldownRef.current = true;
+        sidebarItem.click();
+        hoverTimeRef.current = 0;
+        setTimeout(() => { clickCooldownRef.current = false; }, 1500);
+      }
+
+      // -------------------
+      // NEW LIST BUTTON
+      // -------------------
+      if (
+        newListBtn &&
+        currentElement === newListBtn &&
+        hoverTimeRef.current > 1000
+      ) {
+        clickCooldownRef.current = true;
+        newListBtn.click();
+        hoverTimeRef.current = 0;
+        setTimeout(() => { clickCooldownRef.current = false; }, 1500);
+      }
+
+      // -------------------
+      // OPEN TASK — FIX: click su todoWrap, non su .todo-body
+      // -------------------
+      if (
+        todoBody &&
+        todoWrap &&
+        currentElement === todoWrap &&
+        !checkBtn &&                  // evita di aprire mentre si punta al check
         hoverTimeRef.current > 800
       ) {
-
-        clickCooldownRef.current =
-          true;
-
-        body.click();
-
+        clickCooldownRef.current = true;
+        todoWrap.click();
         hoverTimeRef.current = 0;
-
-        setTimeout(() => {
-
-          clickCooldownRef.current =
-            false;
-
-        }, 1500);
-
+        setTimeout(() => { clickCooldownRef.current = false; }, 1500);
       }
 
       // -------------------
       // COMPLETE TASK
       // -------------------
-
       if (
         checkBtn &&
-        currentElement ===
-          checkBtn &&
+        currentElement === checkBtn &&
         hoverTimeRef.current > 1000
       ) {
-
-        clickCooldownRef.current =
-          true;
-
+        clickCooldownRef.current = true;
         checkBtn.dispatchEvent(
-          new MouseEvent(
-            'click',
-            {
-              bubbles: true,
-              cancelable: true,
-              view: window,
-            }
-          )
+          new MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+          })
         );
-
         hoverTimeRef.current = 0;
-
-        setTimeout(() => {
-
-          clickCooldownRef.current =
-            false;
-
-        }, 1500);
-
+        setTimeout(() => { clickCooldownRef.current = false; }, 1500);
       }
 
     });
 
     navigator.mediaDevices
       .getUserMedia({
-
         video: {
           width: 640,
           height: 480,
-          facingMode: 'user'
-        }
-
+          facingMode: 'user',
+        },
       })
       .then(async (stream) => {
 
-        console.log(
-          'Webcam OK'
-        );
+        console.log('Webcam OK');
 
-        if (
-          !videoRef.current
-        ) return;
+        if (!videoRef.current) return;
 
-        videoRef.current.srcObject =
-          stream;
-
+        videoRef.current.srcObject = stream;
         await videoRef.current.play();
 
-        const detect =
-          async () => {
-
-            if (!running) return;
-
-            if (
-              videoRef.current
-            ) {
-
-              await faceMesh.send({
-
-                image:
-                  videoRef.current
-
-              });
-
-            }
-
-            requestAnimationFrame(
-              detect
-            );
-
-          };
+        const detect = async () => {
+          if (!running) return;
+          if (videoRef.current) {
+            await faceMesh.send({ image: videoRef.current });
+          }
+          requestAnimationFrame(detect);
+        };
 
         detect();
 
       })
       .catch((err) => {
-
-        console.error(
-          'Webcam error:',
-          err
-        );
-
+        console.error('Webcam error:', err);
       });
 
     return () => {
-
       running = false;
-
-      const stream =
-        videoRef.current
-          ?.srcObject as
-          | MediaStream
-          | null;
-
-      stream
-        ?.getTracks()
-        .forEach(track =>
-          track.stop()
-        );
-
+      const stream = videoRef.current?.srcObject as MediaStream | null;
+      stream?.getTracks().forEach((track) => track.stop());
     };
 
   }, []);
 
-  function handleOnboarding(
-    p: Profile
-  ) {
-
-    localStorage.setItem(
-      'focus-profile',
-      JSON.stringify(p)
-    );
-
+  function handleOnboarding(p: Profile) {
+    localStorage.setItem('focus-profile', JSON.stringify(p));
     setProfile(p);
-
   }
 
   return (
-
     <>
       {/* DEBUG DOT */}
-
       <div
         style={{
-
           position: 'fixed',
-
-          left:
-            gazePoint.x - 8,
-
-          top:
-            gazePoint.y - 8,
-
+          left: gazePoint.x - 8,
+          top: gazePoint.y - 8,
           width: 16,
           height: 16,
-
           borderRadius: '50%',
-
           background: 'red',
-
           zIndex: 999999,
-
-          pointerEvents:
-            'none',
-
-          boxShadow:
-            '0 0 20px red',
-
+          pointerEvents: 'none',
+          boxShadow: '0 0 20px red',
         }}
       />
 
       {/* VIDEO */}
-
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        style={{
-          display: 'none'
-        }}
+        style={{ display: 'none' }}
       />
 
-      {!loaded
-        ? null
-        : !profile
-        ? (
+      {!loaded ? null : !profile ? (
 
-          <Onboarding
-            onComplete={
-              handleOnboarding
-            }
+        <Onboarding onComplete={handleOnboarding} />
+
+      ) : (
+
+        <div
+          className={`app-layout ${
+            !state.sidebarOpen ? 'app-layout--collapsed' : ''
+          }`}
+        >
+          <Sidebar
+            profile={profile}
+            onProfileChange={(p) => {
+              localStorage.setItem('focus-profile', JSON.stringify(p));
+              setProfile(p);
+            }}
           />
+          <MainContent />
+        </div>
 
-        ) : (
-
-          <div
-            className={`app-layout ${
-              !state.sidebarOpen
-                ? 'app-layout--collapsed'
-                : ''
-            }`}
-          >
-
-            <Sidebar
-              profile={profile}
-              onProfileChange={(p) => {
-
-                localStorage.setItem(
-                  'focus-profile',
-                  JSON.stringify(p)
-                );
-
-                setProfile(p);
-
-              }}
-            />
-
-            <MainContent />
-
-          </div>
-
-        )}
-
+      )}
     </>
-
   );
-
 }
