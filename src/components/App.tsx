@@ -5,6 +5,8 @@ import { useStore } from '../store';
 import { Sidebar } from './Sidebar';
 import { MainContent } from './MainContent';
 import { Onboarding } from './Onboarding';
+import { CalibrationOverlay } from './CalibrationOverlay';
+import { AffineTransform, applyTransform } from './useCalibration';
 
 interface Profile {
   name: string;
@@ -22,6 +24,20 @@ export function App() {
 
   const [loaded, setLoaded] =
     useState(false);
+
+  // CALIBRAZIONE
+  const [showCalibration, setShowCalibration] =
+    useState(false);
+
+  const [calibrationDone, setCalibrationDone] =
+    useState(false);
+
+  const transformRef =
+    useRef<AffineTransform | null>(null);
+
+  // Iris grezza passata a CalibrationOverlay
+  const [rawIris, setRawIris] =
+    useState({ x: 0.5, y: 0.5 });
 
   // DEBUG DOT
   const [gazePoint, setGazePoint] =
@@ -94,12 +110,41 @@ export function App() {
 
       const landmarks = results.multiFaceLandmarks[0];
 
-      // NASO
-      const nose = landmarks[1];
+      // IRIS TRACKING
+      const leftIris  = landmarks[468];
+      const rightIris = landmarks[473];
+      const leftEye   = landmarks[33];
+      const rightEye  = landmarks[263];
 
-      // SCREEN COORDS
-      const targetX = window.innerWidth  * (1 - nose.x);
-      const targetY = window.innerHeight * nose.y;
+      // Offset iris rispetto al centro della testa
+      const headCenterX = (leftEye.x + rightEye.x) / 2;
+      const headCenterY = (leftEye.y + rightEye.y) / 2;
+
+      const irisX = ((leftIris.x + rightIris.x) / 2) - headCenterX;
+      const irisY = ((leftIris.y + rightIris.y) / 2) - headCenterY;
+
+      // Aggiorna iris grezza per CalibrationOverlay
+      setRawIris({ x: irisX, y: irisY });
+
+      // CALCOLO POSIZIONE SCHERMO
+      let targetX: number;
+      let targetY: number;
+
+      if (transformRef.current) {
+        // Con calibrazione: trasformazione affine
+        const p = applyTransform(transformRef.current, irisX, irisY);
+        targetX = p.x;
+        targetY = p.y;
+      } else {
+        // Senza calibrazione: fallback sensitivity fissa
+        const sensitivity = 15;
+        targetX = window.innerWidth  * (0.5 - irisX * sensitivity);
+        targetY = window.innerHeight * (0.5 + irisY * sensitivity);
+      }
+
+      // CLAMP ai bordi dello schermo
+      targetX = Math.max(0, Math.min(window.innerWidth,  targetX));
+      targetY = Math.max(0, Math.min(window.innerHeight, targetY));
 
       // SMOOTHING ADATTIVO
       const dx   = targetX - smoothX.current;
@@ -114,12 +159,15 @@ export function App() {
       smoothX.current = smoothX.current * (1 - alpha) + targetX * alpha;
       smoothY.current = smoothY.current * (1 - alpha) + targetY * alpha;
 
-      // CLAMP
+      // CLAMP post-smoothing
       const screenX = Math.max(0, Math.min(window.innerWidth,  smoothX.current));
       const screenY = Math.max(0, Math.min(window.innerHeight, smoothY.current));
 
       // DEBUG DOT
       setGazePoint({ x: screenX, y: screenY });
+
+      // Non processare click durante la calibrazione
+      if (showCalibration) return;
 
       // TARGET
       const target = document.elementFromPoint(screenX, screenY) as HTMLElement | null;
@@ -133,94 +181,24 @@ export function App() {
 
       // --- SELETTORI ---
 
-      // STEP CHECK
-      const stepBtn = target.closest(
-        '[data-gaze-step]'
-      ) as HTMLElement | null;
-
-      // CHECK BUTTON
-      const checkBtn = target.closest(
-        '[data-check-button="true"]'
-      ) as HTMLElement | null;
-
-      // STAR
-      const starBtn = target.closest(
-        '[data-gaze-star="true"]'
-      ) as HTMLElement | null;
-
-      // TODO ITEM WRAP
-      const todoWrap = target.closest(
-        '.todo-item-wrap'
-      ) as HTMLElement | null;
-
-      const todoBody = target.closest(
-        '.todo-body'
-      ) as HTMLElement | null;
-
-      // SIDEBAR NAV
-      const sidebarItem = target.closest(
-        '[data-gaze-nav="true"]'
-      ) as HTMLElement | null;
-
-      // NEW LIST BUTTON (apri form)
-      const newListBtn = target.closest(
-        '[data-gaze-new-list="true"]'
-      ) as HTMLElement | null;
-
-      // NEW LIST CONFIRM
-      const newListConfirm = target.closest(
-        '[data-gaze-new-list-confirm="true"]'
-      ) as HTMLElement | null;
-
-      // NEW LIST CANCEL
-      const newListCancel = target.closest(
-        '[data-gaze-new-list-cancel="true"]'
-      ) as HTMLElement | null;
-
-      // EDIT PROFILE
-      const editProfile = target.closest(
-        '[data-gaze-edit-profile="true"]'
-      ) as HTMLElement | null;
-
-      // TOGGLE SIDEBAR
-      const menuBtn = target.closest(
-        '.menu-btn'
-      ) as HTMLElement | null;
-
-      // ADD TASK OPEN (bottone +)
-      const addTaskOpen = target.closest(
-        '[data-gaze-add-task-open="true"]'
-      ) as HTMLElement | null;
-
-      // PRIORITY PILL
-      const priorityBtn = target.closest(
-        '[data-gaze-priority]'
-      ) as HTMLElement | null;
-
-      // ADD TASK CONFIRM
-      const addTaskBtn = target.closest(
-        '[data-gaze-add-task="true"]'
-      ) as HTMLElement | null;
-
-      // CANCEL TASK
-      const cancelTaskBtn = target.closest(
-        '[data-gaze-cancel-task="true"]'
-      ) as HTMLElement | null;
-
-      // FILTER TOGGLE
-      const filterToggle = target.closest(
-        '[data-gaze-filter-toggle="true"]'
-      ) as HTMLElement | null;
-
-      // FILTER BUTTON
-      const filterBtn = target.closest(
-        '[data-gaze-filter]'
-      ) as HTMLElement | null;
-
-      // INPUT / TEXTAREA
-      const inputField = target.closest(
-        '[data-gaze-input]'
-      ) as HTMLElement | null;
+      const stepBtn = target.closest('[data-gaze-step]') as HTMLElement | null;
+      const checkBtn = target.closest('[data-check-button="true"]') as HTMLElement | null;
+      const starBtn = target.closest('[data-gaze-star="true"]') as HTMLElement | null;
+      const todoWrap = target.closest('.todo-item-wrap') as HTMLElement | null;
+      const todoBody = target.closest('.todo-body') as HTMLElement | null;
+      const sidebarItem = target.closest('[data-gaze-nav="true"]') as HTMLElement | null;
+      const newListBtn = target.closest('[data-gaze-new-list="true"]') as HTMLElement | null;
+      const newListConfirm = target.closest('[data-gaze-new-list-confirm="true"]') as HTMLElement | null;
+      const newListCancel = target.closest('[data-gaze-new-list-cancel="true"]') as HTMLElement | null;
+      const editProfile = target.closest('[data-gaze-edit-profile="true"]') as HTMLElement | null;
+      const menuBtn = target.closest('.menu-btn') as HTMLElement | null;
+      const addTaskOpen = target.closest('[data-gaze-add-task-open="true"]') as HTMLElement | null;
+      const priorityBtn = target.closest('[data-gaze-priority]') as HTMLElement | null;
+      const addTaskBtn = target.closest('[data-gaze-add-task="true"]') as HTMLElement | null;
+      const cancelTaskBtn = target.closest('[data-gaze-cancel-task="true"]') as HTMLElement | null;
+      const filterToggle = target.closest('[data-gaze-filter-toggle="true"]') as HTMLElement | null;
+      const filterBtn = target.closest('[data-gaze-filter]') as HTMLElement | null;
+      const inputField = target.closest('[data-gaze-input]') as HTMLElement | null;
 
       // VISUAL FEEDBACK
       if (todoWrap) {
@@ -268,7 +246,7 @@ export function App() {
       // COOLDOWN
       if (clickCooldownRef.current) return;
 
-      // Helper per click semplici a 1000ms
+      // Helper click
       function gazeClick(el: HTMLElement | null, ms = 1000, cooldown = 1500) {
         if (!el || currentElement !== el) return;
         if (hoverTimeRef.current > ms) {
@@ -279,46 +257,19 @@ export function App() {
         }
       }
 
-      // SIDEBAR ITEM
       gazeClick(sidebarItem);
-
-      // NEW LIST (apri form)
       gazeClick(newListBtn);
-
-      // NEW LIST CONFIRM
       gazeClick(newListConfirm);
-
-      // NEW LIST CANCEL
       gazeClick(newListCancel);
-
-      // EDIT PROFILE
       gazeClick(editProfile);
-
-      // TOGGLE SIDEBAR
       gazeClick(menuBtn);
-
-      // ADD TASK OPEN
       gazeClick(addTaskOpen);
-
-      // PRIORITY PILL
       gazeClick(priorityBtn);
-
-      // ADD TASK CONFIRM
       gazeClick(addTaskBtn);
-
-      // CANCEL TASK
       gazeClick(cancelTaskBtn);
-
-      // FILTER TOGGLE
       gazeClick(filterToggle);
-
-      // FILTER BUTTON
       gazeClick(filterBtn);
-
-      // STAR
       gazeClick(starBtn);
-
-      // TOGGLE STEP
       gazeClick(stepBtn);
 
       // OPEN TASK
@@ -355,7 +306,7 @@ export function App() {
         setTimeout(() => { clickCooldownRef.current = false; }, 1500);
       }
 
-      // INPUT FOCUS — dwell più lungo per evitare focus accidentali
+      // INPUT FOCUS
       if (
         inputField &&
         currentElement === inputField &&
@@ -407,11 +358,18 @@ export function App() {
       stream?.getTracks().forEach((track) => track.stop());
     };
 
-  }, []);
+  }, [showCalibration]);
 
   function handleOnboarding(p: Profile) {
     localStorage.setItem('focus-profile', JSON.stringify(p));
     setProfile(p);
+    setShowCalibration(true);
+  }
+
+  function handleCalibrationComplete(transform: AffineTransform) {
+    transformRef.current = transform;
+    setCalibrationDone(true);
+    setShowCalibration(false);
   }
 
   return (
@@ -441,6 +399,16 @@ export function App() {
         style={{ display: 'none' }}
       />
 
+      {/* CALIBRAZIONE */}
+      {showCalibration && (
+        <CalibrationOverlay
+          irisX={rawIris.x}
+          irisY={rawIris.y}
+          onComplete={handleCalibrationComplete}
+          onSkip={() => setShowCalibration(false)}
+        />
+      )}
+
       {!loaded ? null : !profile ? (
 
         <Onboarding onComplete={handleOnboarding} />
@@ -460,6 +428,27 @@ export function App() {
             }}
           />
           <MainContent />
+
+          {/* Bottone ricalibrazione */}
+          <button
+            onClick={() => setShowCalibration(true)}
+            style={{
+              position:     'fixed',
+              bottom:       16,
+              right:        16,
+              padding:      '8px 14px',
+              background:   calibrationDone ? '#107c10' : '#ca5010',
+              border:       'none',
+              borderRadius: 8,
+              color:        '#fff',
+              fontSize:     12,
+              cursor:       'pointer',
+              zIndex:       9999,
+              opacity:      0.8,
+            }}
+          >
+            {calibrationDone ? '✓ Recalibrate' : 'Calibrate'}
+          </button>
         </div>
 
       )}
