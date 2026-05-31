@@ -53,14 +53,10 @@ export function Sidebar({
     useState(profile.name);
 
   const systemLists =
-    state.lists.filter(
-      l => l.isSystem
-    );
+    state.lists.filter(l => l.isSystem);
 
   const userLists =
-    state.lists.filter(
-      l => !l.isSystem
-    );
+    state.lists.filter(l => !l.isSystem);
 
   function addList() {
 
@@ -98,18 +94,8 @@ export function Sidebar({
   const age =
     profile.birthday
       ? Math.floor(
-          (
-            Date.now() -
-            new Date(
-              profile.birthday
-            ).getTime()
-          ) /
-            (
-              365.25 *
-              24 *
-              3600 *
-              1000
-            )
+          (Date.now() - new Date(profile.birthday).getTime()) /
+          (365.25 * 24 * 3600 * 1000)
         )
       : null;
 
@@ -136,30 +122,11 @@ export function Sidebar({
             <input
               className="user-name-input"
               value={editName}
-              onChange={(e) =>
-                setEditName(
-                  e.target.value
-                )
-              }
-              onBlur={
-                saveProfileName
-              }
+              onChange={(e) => setEditName(e.target.value)}
+              onBlur={saveProfileName}
               onKeyDown={(e) => {
-
-                if (
-                  e.key === 'Enter'
-                ) {
-                  saveProfileName();
-                }
-
-                if (
-                  e.key === 'Escape'
-                ) {
-                  setEditingProfile(
-                    false
-                  );
-                }
-
+                if (e.key === 'Enter') saveProfileName();
+                if (e.key === 'Escape') setEditingProfile(false);
               }}
               autoFocus
             />
@@ -167,17 +134,11 @@ export function Sidebar({
           ) : (
 
             <span
+              data-gaze-edit-profile="true"
               className="user-name"
               onClick={() => {
-
-                setEditName(
-                  profile.name
-                );
-
-                setEditingProfile(
-                  true
-                );
-
+                setEditName(profile.name);
+                setEditingProfile(true);
               }}
             >
 
@@ -198,9 +159,7 @@ export function Sidebar({
               ? 'He/Him'
               : 'She/Her'}
 
-            {age !== null
-              ? ` · ${age}y`
-              : ''}
+            {age !== null ? ` · ${age}y` : ''}
 
           </span>
 
@@ -212,63 +171,50 @@ export function Sidebar({
 
         <div className="nav-section">
 
-          {systemLists.map(
-            (list) => {
+          {systemLists.map((list) => {
 
-              const count =
-                getListCount(
-                  list.id
-                );
+            const count = getListCount(list.id);
 
-              return (
+            return (
 
-                <button
-                  key={list.id}
-                  data-gaze-nav="true"
-                  className={`nav-item ${
-                    state.activeListId ===
-                    list.id
-                      ? 'nav-item--active'
-                      : ''
-                  }`}
-                  onClick={() =>
-                    dispatch({
-                      type:
-                        'SET_ACTIVE_LIST',
-                      listId:
-                        list.id,
-                    })
-                  }
-                  style={{
-                    '--accent':
-                      list.color,
-                  } as React.CSSProperties}
-                >
+              <button
+                key={list.id}
+                data-gaze-nav="true"
+                className={`nav-item ${
+                  state.activeListId === list.id
+                    ? 'nav-item--active'
+                    : ''
+                }`}
+                onClick={() =>
+                  dispatch({
+                    type: 'SET_ACTIVE_LIST',
+                    listId: list.id,
+                  })
+                }
+                style={{
+                  '--accent': list.color,
+                } as React.CSSProperties}
+              >
 
-                  <span className="nav-icon">
-                    {iconMap[
-                      list.icon
-                    ] || list.icon}
+                <span className="nav-icon">
+                  {iconMap[list.icon] || list.icon}
+                </span>
+
+                <span className="nav-label">
+                  {list.name}
+                </span>
+
+                {count > 0 && (
+                  <span className="nav-count">
+                    {count}
                   </span>
+                )}
 
-                  <span className="nav-label">
-                    {list.name}
-                  </span>
+              </button>
 
-                  {count > 0 && (
+            );
 
-                    <span className="nav-count">
-                      {count}
-                    </span>
-
-                  )}
-
-                </button>
-
-              );
-
-            }
-          )}
+          })}
 
         </div>
 
@@ -280,82 +226,63 @@ export function Sidebar({
               My Lists
             </span>
 
-            {userLists.map(
-              (list) => {
+            {userLists.map((list) => {
 
-                const count =
-                  getListCount(
-                    list.id
-                  );
+              const count = getListCount(list.id);
 
-                return (
+              return (
+
+                <button
+                  key={list.id}
+                  data-gaze-nav="true"
+                  className={`nav-item ${
+                    state.activeListId === list.id
+                      ? 'nav-item--active'
+                      : ''
+                  }`}
+                  onClick={() =>
+                    dispatch({
+                      type: 'SET_ACTIVE_LIST',
+                      listId: list.id,
+                    })
+                  }
+                  style={{
+                    '--accent': list.color,
+                  } as React.CSSProperties}
+                >
+
+                  <span className="nav-icon nav-icon--emoji">
+                    {list.icon}
+                  </span>
+
+                  <span className="nav-label">
+                    {list.name}
+                  </span>
+
+                  {count > 0 && (
+                    <span className="nav-count">
+                      {count}
+                    </span>
+                  )}
 
                   <button
-                    key={list.id}
-                    data-gaze-nav="true"
-                    className={`nav-item ${
-                      state.activeListId ===
-                      list.id
-                        ? 'nav-item--active'
-                        : ''
-                    }`}
-                    onClick={() =>
+                    className="nav-delete"
+                    onClick={(e) => {
+                      e.stopPropagation();
                       dispatch({
-                        type:
-                          'SET_ACTIVE_LIST',
-                        listId:
-                          list.id,
-                      })
-                    }
-                    style={{
-                      '--accent':
-                        list.color,
-                    } as React.CSSProperties}
+                        type: 'DELETE_LIST',
+                        id: list.id,
+                      });
+                    }}
                   >
-
-                    <span className="nav-icon nav-icon--emoji">
-                      {list.icon}
-                    </span>
-
-                    <span className="nav-label">
-                      {list.name}
-                    </span>
-
-                    {count > 0 && (
-
-                      <span className="nav-count">
-                        {count}
-                      </span>
-
-                    )}
-
-                    <button
-                      className="nav-delete"
-                      onClick={(e) => {
-
-                        e.stopPropagation();
-
-                        dispatch({
-                          type:
-                            'DELETE_LIST',
-                          id: list.id,
-                        });
-
-                      }}
-                    >
-
-                      <Trash2
-                        size={12}
-                      />
-
-                    </button>
-
+                    <Trash2 size={12} />
                   </button>
 
-                );
+                </button>
 
-              }
-            )}
+              );
+
+            })}
 
           </div>
 
@@ -370,54 +297,36 @@ export function Sidebar({
           <div className="new-list-form">
 
             <input
+              data-gaze-input="new-list"
               className="new-list-input"
               placeholder="List name..."
               value={newListName}
-              onChange={(e) =>
-                setNewListName(
-                  e.target.value
-                )
-              }
+              onChange={(e) => setNewListName(e.target.value)}
               onKeyDown={(e) => {
-
-                if (
-                  e.key === 'Enter'
-                ) {
-                  addList();
-                }
-
-                if (
-                  e.key === 'Escape'
-                ) {
-                  setShowNewList(
-                    false
-                  );
-                }
-
+                if (e.key === 'Enter') addList();
+                if (e.key === 'Escape') setShowNewList(false);
               }}
               autoFocus
             />
 
             <div className="new-list-actions">
 
+              {/* Conferma creazione lista */}
               <button
+                data-gaze-new-list-confirm="true"
                 className="btn-create"
                 onClick={addList}
               >
                 Create
               </button>
 
+              {/* Annulla creazione lista */}
               <button
+                data-gaze-new-list-cancel="true"
                 className="btn-cancel-sm"
-                onClick={() =>
-                  setShowNewList(
-                    false
-                  )
-                }
+                onClick={() => setShowNewList(false)}
               >
-
                 <X size={14} />
-
               </button>
 
             </div>
@@ -429,15 +338,10 @@ export function Sidebar({
           <button
             data-gaze-new-list="true"
             className="new-list-btn"
-            onClick={() =>
-              setShowNewList(true)
-            }
+            onClick={() => setShowNewList(true)}
           >
-
             <Plus size={16} />
-
             New list
-
           </button>
 
         )}

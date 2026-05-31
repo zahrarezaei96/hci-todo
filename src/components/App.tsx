@@ -94,29 +94,29 @@ export function App() {
 
       const landmarks = results.multiFaceLandmarks[0];
 
-      // LANDMARK SELECTION
-      // landmarks[1]   = nose tip  → head tracking (original)
-      // landmarks[468] = left iris center  → true eye tracking (con refineLandmarks: true)
-      // landmarks[473] = right iris center → true eye tracking (con refineLandmarks: true)
-      // Media degli iris per punto di gaze più stabile:
-      const leftIris  = landmarks[468];
-      const rightIris = landmarks[473];
-
-      const gaze = {
-        x: (leftIris.x + rightIris.x) / 2,
-        y: (leftIris.y + rightIris.y) / 2,
-      };
+      // NASO
+      const nose = landmarks[1];
 
       // SCREEN COORDS
-      const targetX = window.innerWidth  * (1 - gaze.x);
-      const targetY = window.innerHeight * gaze.y;
+      const targetX = window.innerWidth  * (1 - nose.x);
+      const targetY = window.innerHeight * nose.y;
 
-      // SMOOTHING (0.8/0.2 = più lento ma più stabile; abbassa a 0.6/0.4 per più reattività)
-      smoothX.current = smoothX.current * 0.8 + targetX * 0.2;
-      smoothY.current = smoothY.current * 0.8 + targetY * 0.2;
+      // SMOOTHING ADATTIVO
+      const dx   = targetX - smoothX.current;
+      const dy   = targetY - smoothY.current;
+      const dist = Math.sqrt(dx * dx + dy * dy);
 
-      const screenX = smoothX.current;
-      const screenY = smoothY.current;
+      const alpha =
+        dist > 200 ? 0.3  :
+        dist > 80  ? 0.15 :
+                     0.06;
+
+      smoothX.current = smoothX.current * (1 - alpha) + targetX * alpha;
+      smoothY.current = smoothY.current * (1 - alpha) + targetY * alpha;
+
+      // CLAMP
+      const screenX = Math.max(0, Math.min(window.innerWidth,  smoothX.current));
+      const screenY = Math.max(0, Math.min(window.innerHeight, smoothY.current));
 
       // DEBUG DOT
       setGazePoint({ x: screenX, y: screenY });
@@ -126,64 +126,138 @@ export function App() {
 
       if (!target) return;
 
-      // RESET HOVER su tutti gli item
+      // RESET HOVER
       document.querySelectorAll('.todo-item-wrap').forEach((el) => {
         (el as HTMLElement).classList.remove('gaze-hover');
       });
 
-      // --- RISOLTO BUG #1: selettori corretti per Sidebar ---
+      // --- SELETTORI ---
 
-      // CHECK BUTTON (TodoItem: data-check-button="true")
+      // STEP CHECK
+      const stepBtn = target.closest(
+        '[data-gaze-step]'
+      ) as HTMLElement | null;
+
+      // CHECK BUTTON
       const checkBtn = target.closest(
         '[data-check-button="true"]'
       ) as HTMLElement | null;
 
-      // TODO ITEM WRAP — FIX: il click per espandere va sul wrapper, non su .todo-body
+      // STAR
+      const starBtn = target.closest(
+        '[data-gaze-star="true"]'
+      ) as HTMLElement | null;
+
+      // TODO ITEM WRAP
       const todoWrap = target.closest(
         '.todo-item-wrap'
       ) as HTMLElement | null;
 
-      // .todo-body è usato solo per capire se siamo sull'area testo,
-      // ma il click viene sparato sul wrapper
       const todoBody = target.closest(
         '.todo-body'
       ) as HTMLElement | null;
 
-      // SIDEBAR NAV — FIX: era data-sidebar-item, ora data-gaze-nav
+      // SIDEBAR NAV
       const sidebarItem = target.closest(
         '[data-gaze-nav="true"]'
       ) as HTMLElement | null;
 
-      // NEW LIST BUTTON — FIX: era data-new-list-button, ora data-gaze-new-list
+      // NEW LIST BUTTON (apri form)
       const newListBtn = target.closest(
         '[data-gaze-new-list="true"]'
       ) as HTMLElement | null;
 
-      // VISUAL FEEDBACK sul todo wrap
+      // NEW LIST CONFIRM
+      const newListConfirm = target.closest(
+        '[data-gaze-new-list-confirm="true"]'
+      ) as HTMLElement | null;
+
+      // NEW LIST CANCEL
+      const newListCancel = target.closest(
+        '[data-gaze-new-list-cancel="true"]'
+      ) as HTMLElement | null;
+
+      // EDIT PROFILE
+      const editProfile = target.closest(
+        '[data-gaze-edit-profile="true"]'
+      ) as HTMLElement | null;
+
+      // TOGGLE SIDEBAR
+      const menuBtn = target.closest(
+        '.menu-btn'
+      ) as HTMLElement | null;
+
+      // ADD TASK OPEN (bottone +)
+      const addTaskOpen = target.closest(
+        '[data-gaze-add-task-open="true"]'
+      ) as HTMLElement | null;
+
+      // PRIORITY PILL
+      const priorityBtn = target.closest(
+        '[data-gaze-priority]'
+      ) as HTMLElement | null;
+
+      // ADD TASK CONFIRM
+      const addTaskBtn = target.closest(
+        '[data-gaze-add-task="true"]'
+      ) as HTMLElement | null;
+
+      // CANCEL TASK
+      const cancelTaskBtn = target.closest(
+        '[data-gaze-cancel-task="true"]'
+      ) as HTMLElement | null;
+
+      // FILTER TOGGLE
+      const filterToggle = target.closest(
+        '[data-gaze-filter-toggle="true"]'
+      ) as HTMLElement | null;
+
+      // FILTER BUTTON
+      const filterBtn = target.closest(
+        '[data-gaze-filter]'
+      ) as HTMLElement | null;
+
+      // INPUT / TEXTAREA
+      const inputField = target.closest(
+        '[data-gaze-input]'
+      ) as HTMLElement | null;
+
+      // VISUAL FEEDBACK
       if (todoWrap) {
         todoWrap.classList.add('gaze-hover');
       }
 
-      // --- RISOLTO BUG #2: delta calcolato solo quando c'è un elemento valido ---
       const currentElement =
-        checkBtn ||
-        (todoBody && todoWrap ? todoWrap : null) ||  // usa il wrapper come target del click
-        sidebarItem ||
+        stepBtn         ||
+        checkBtn        ||
+        starBtn         ||
+        addTaskBtn      ||
+        cancelTaskBtn   ||
+        priorityBtn     ||
+        addTaskOpen     ||
+        filterBtn       ||
+        filterToggle    ||
+        newListConfirm  ||
+        newListCancel   ||
+        editProfile     ||
+        menuBtn         ||
+        inputField      ||
+        (todoBody && todoWrap ? todoWrap : null) ||
+        sidebarItem     ||
         newListBtn;
 
       if (!currentElement) {
         hoveredElementRef.current = null;
-        hoverTimeRef.current     = 0;
-        lastFrameRef.current     = Date.now(); // reset anche qui per evitare delta spike
+        hoverTimeRef.current      = 0;
+        lastFrameRef.current      = Date.now();
         return;
       }
 
-      // TIMER — delta calcolato solo qui, quando c'è un elemento valido
+      // TIMER
       const now   = Date.now();
       const delta = now - lastFrameRef.current;
       lastFrameRef.current = now;
 
-      // SAME ELEMENT
       if (hoveredElementRef.current === currentElement) {
         hoverTimeRef.current += delta;
       } else {
@@ -194,42 +268,67 @@ export function App() {
       // COOLDOWN
       if (clickCooldownRef.current) return;
 
-      // -------------------
+      // Helper per click semplici a 1000ms
+      function gazeClick(el: HTMLElement | null, ms = 1000, cooldown = 1500) {
+        if (!el || currentElement !== el) return;
+        if (hoverTimeRef.current > ms) {
+          clickCooldownRef.current = true;
+          el.click();
+          hoverTimeRef.current = 0;
+          setTimeout(() => { clickCooldownRef.current = false; }, cooldown);
+        }
+      }
+
       // SIDEBAR ITEM
-      // -------------------
-      if (
-        sidebarItem &&
-        currentElement === sidebarItem &&
-        hoverTimeRef.current > 1000
-      ) {
-        clickCooldownRef.current = true;
-        sidebarItem.click();
-        hoverTimeRef.current = 0;
-        setTimeout(() => { clickCooldownRef.current = false; }, 1500);
-      }
+      gazeClick(sidebarItem);
 
-      // -------------------
-      // NEW LIST BUTTON
-      // -------------------
-      if (
-        newListBtn &&
-        currentElement === newListBtn &&
-        hoverTimeRef.current > 1000
-      ) {
-        clickCooldownRef.current = true;
-        newListBtn.click();
-        hoverTimeRef.current = 0;
-        setTimeout(() => { clickCooldownRef.current = false; }, 1500);
-      }
+      // NEW LIST (apri form)
+      gazeClick(newListBtn);
 
-      // -------------------
-      // OPEN TASK — FIX: click su todoWrap, non su .todo-body
-      // -------------------
+      // NEW LIST CONFIRM
+      gazeClick(newListConfirm);
+
+      // NEW LIST CANCEL
+      gazeClick(newListCancel);
+
+      // EDIT PROFILE
+      gazeClick(editProfile);
+
+      // TOGGLE SIDEBAR
+      gazeClick(menuBtn);
+
+      // ADD TASK OPEN
+      gazeClick(addTaskOpen);
+
+      // PRIORITY PILL
+      gazeClick(priorityBtn);
+
+      // ADD TASK CONFIRM
+      gazeClick(addTaskBtn);
+
+      // CANCEL TASK
+      gazeClick(cancelTaskBtn);
+
+      // FILTER TOGGLE
+      gazeClick(filterToggle);
+
+      // FILTER BUTTON
+      gazeClick(filterBtn);
+
+      // STAR
+      gazeClick(starBtn);
+
+      // TOGGLE STEP
+      gazeClick(stepBtn);
+
+      // OPEN TASK
       if (
         todoBody &&
         todoWrap &&
         currentElement === todoWrap &&
-        !checkBtn &&                  // evita di aprire mentre si punta al check
+        !checkBtn &&
+        !stepBtn &&
+        !starBtn &&
         hoverTimeRef.current > 800
       ) {
         clickCooldownRef.current = true;
@@ -238,9 +337,7 @@ export function App() {
         setTimeout(() => { clickCooldownRef.current = false; }, 1500);
       }
 
-      // -------------------
       // COMPLETE TASK
-      // -------------------
       if (
         checkBtn &&
         currentElement === checkBtn &&
@@ -256,6 +353,18 @@ export function App() {
         );
         hoverTimeRef.current = 0;
         setTimeout(() => { clickCooldownRef.current = false; }, 1500);
+      }
+
+      // INPUT FOCUS — dwell più lungo per evitare focus accidentali
+      if (
+        inputField &&
+        currentElement === inputField &&
+        hoverTimeRef.current > 1500
+      ) {
+        clickCooldownRef.current = true;
+        (inputField as HTMLInputElement).focus();
+        hoverTimeRef.current = 0;
+        setTimeout(() => { clickCooldownRef.current = false; }, 2000);
       }
 
     });
@@ -310,16 +419,16 @@ export function App() {
       {/* DEBUG DOT */}
       <div
         style={{
-          position: 'fixed',
-          left: gazePoint.x - 8,
-          top: gazePoint.y - 8,
-          width: 16,
-          height: 16,
-          borderRadius: '50%',
-          background: 'red',
-          zIndex: 999999,
+          position:      'fixed',
+          left:          gazePoint.x - 8,
+          top:           gazePoint.y - 8,
+          width:         16,
+          height:        16,
+          borderRadius:  '50%',
+          background:    'red',
+          zIndex:        999999,
           pointerEvents: 'none',
-          boxShadow: '0 0 20px red',
+          boxShadow:     '0 0 20px red',
         }}
       />
 

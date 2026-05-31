@@ -331,6 +331,7 @@ export function TodoItem({ todo }: Props) {
         {/* STAR */}
 
         <button
+          data-gaze-star="true"
           className={`star-btn ${
             todo.starred
               ? 'star-btn--active'
@@ -407,6 +408,7 @@ export function TodoItem({ todo }: Props) {
               >
 
                 <button
+                  data-gaze-step={step.id}
                   className={`step-check ${
                     step.completed
                       ? 'step-check--checked'
