@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useStore } from '../store';
 import { TodoItem } from './TodoItem';
-import { Search, Plus, Menu, SlidersHorizontal, Trash2, Flag, Calendar, Tag, X } from 'lucide-react';
+import { Search, Plus, Menu, SlidersHorizontal, Trash2, Flag, Calendar, Tag, X, Eye, EyeOff } from 'lucide-react';
 import { Priority } from '../types';
+import { useGaze } from '../modules/gaze/GazeContext';
+import { GazeProgress } from '../modules/gaze/GazeProgress';
 
 const priorityConfig: { value: Priority; label: string; color: string }[] = [
   { value: 'low', label: 'Low', color: '#4ade80' },
@@ -13,6 +15,7 @@ const priorityConfig: { value: Priority; label: string; color: string }[] = [
 
 export function MainContent() {
   const { state, dispatch, getFilteredTodos } = useStore();
+  const { enabled, toggleGaze, registerTarget, getProgress } = useGaze();
 
   const [newText, setNewText] = useState('');
   const [newPriority, setNewPriority] = useState<Priority>('medium');
@@ -21,6 +24,16 @@ export function MainContent() {
   const [newNotes, setNewNotes] = useState('');
   const [expanded, setExpanded] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+
+  const GAZE_ADD_ID = 'main-add-task';
+
+  useEffect(() => {
+    if (!enabled) return;
+    const u = registerTarget(GAZE_ADD_ID, () => setExpanded(true));
+    return u;
+  }, [enabled]);
+
+  const addProgress = getProgress(GAZE_ADD_ID);
 
   const activeList = state.lists.find(l => l.id === state.activeListId);
   const todos = getFilteredTodos();
@@ -67,6 +80,16 @@ export function MainContent() {
           </div>
         </div>
         <div className="main-header-right">
+          {/* Gaze toggle button */}
+          <button
+            className={`gaze-toggle ${enabled ? 'gaze-toggle--active' : ''}`}
+            onClick={toggleGaze}
+            title={enabled ? 'Disable eye tracking' : 'Enable eye tracking'}
+          >
+            {enabled ? <Eye size={16} /> : <EyeOff size={16} />}
+            <span>{enabled ? 'Eye On' : 'Eye Off'}</span>
+          </button>
+
           <button className={`filter-toggle ${showFilters ? 'filter-toggle--active' : ''}`} onClick={() => setShowFilters(!showFilters)}>
             <SlidersHorizontal size={16} />
           </button>
@@ -101,9 +124,13 @@ export function MainContent() {
       {/* ── Add task box ── */}
       <div className={`add-task-box ${expanded ? 'add-task-box--expanded' : ''}`}>
         <div className="add-task-row">
-          <button className="add-task-icon" onClick={addTodo}>
-            <Plus size={18} />
-          </button>
+          {/* Add button with gaze */}
+          <div data-gaze-id={GAZE_ADD_ID} style={{ position: 'relative', flexShrink: 0 }}>
+            <button className="add-task-icon" onClick={addTodo}>
+              <Plus size={18} />
+            </button>
+            {enabled && <GazeProgress progress={addProgress} size={36} color="#0078d4" />}
+          </div>
           <input
             className="add-task-input"
             placeholder="Add a task"

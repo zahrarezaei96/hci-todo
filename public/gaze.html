@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="/node_modules/webgazer/webgazer.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; }
+    #dot {
+      position: fixed; width: 22px; height: 22px;
+      border-radius: 50%;
+      background: rgba(0,120,212,0.6);
+      border: 3px solid #0078d4;
+      pointer-events: none; z-index: 999999;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 16px rgba(0,120,212,0.6);
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="dot"></div>
+  <script>
+    var dot = document.getElementById('dot');
+
+    window.addEventListener('load', function() {
+      webgazer.setGazeListener(function(data) {
+        if (!data) return;
+        window.parent.postMessage({ type: 'gaze', x: data.x, y: data.y }, '*');
+        dot.style.display = 'block';
+        dot.style.left = data.x + 'px';
+        dot.style.top = data.y + 'px';
+      });
+
+      webgazer.begin();
+      webgazer.showVideoPreview(true);
+      webgazer.showPredictionPoints(false);
+
+      function fixStyles() {
+        var container = document.getElementById('webgazerVideoContainer');
+        if (!container) { setTimeout(fixStyles, 300); return; }
+
+        container.setAttribute('style',
+          'position:fixed!important;bottom:0!important;right:0!important;' +
+          'top:auto!important;left:auto!important;' +
+          'width:200px!important;height:170px!important;' +
+          'border-radius:0!important;overflow:hidden!important;' +
+          'border:none!important;z-index:1!important;background:#000!important;'
+        );
+
+        var video = document.getElementById('webgazerVideoFeed');
+        if (video) {
+          video.setAttribute('style',
+            'width:200px!important;height:170px!important;' +
+            'object-fit:cover!important;display:block!important;' +
+            'transform:scaleX(-1)!important;'
+          );
+        }
+
+        // Hide canvas overlays
+        var canvases = container.querySelectorAll('canvas');
+        canvases.forEach(function(c) { c.style.display = 'none'; });
+      }
+
+      setTimeout(fixStyles, 800);
+      setTimeout(fixStyles, 1500);
+      setTimeout(fixStyles, 2500);
+    });
+  </script>
+</body>
+</html>

@@ -3,6 +3,7 @@ import { useStore } from '../store';
 import { Sidebar } from './Sidebar';
 import { MainContent } from './MainContent';
 import { Onboarding } from './Onboarding';
+import { GazeProvider } from '../modules/gaze/GazeContext';
 
 interface Profile {
   name: string;
@@ -12,7 +13,7 @@ interface Profile {
 }
 
 export function App() {
-  const { state, dispatch } = useStore();
+  const { state } = useStore();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -28,13 +29,20 @@ export function App() {
   }
 
   if (!loaded) return null;
-
   if (!profile) return <Onboarding onComplete={handleOnboarding} />;
 
   return (
-    <div className={`app-layout ${!state.sidebarOpen ? 'app-layout--collapsed' : ''}`}>
-      <Sidebar profile={profile} onProfileChange={p => { localStorage.setItem('focus-profile', JSON.stringify(p)); setProfile(p); }} />
-      <MainContent />
-    </div>
+    <GazeProvider>
+      <div className={`app-layout ${!state.sidebarOpen ? 'app-layout--collapsed' : ''}`}>
+        <Sidebar
+          profile={profile}
+          onProfileChange={p => {
+            localStorage.setItem('focus-profile', JSON.stringify(p));
+            setProfile(p);
+          }}
+        />
+        <MainContent />
+      </div>
+    </GazeProvider>
   );
 }

@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Todo, Priority } from '../types';
 import { useStore } from '../store';
 import { Star, Calendar, Flag, X, Plus, Trash2, Tag, StickyNote } from 'lucide-react';
+import { useGaze } from '../modules/gaze/GazeContext';
+import { GazeProgress } from '../modules/gaze/GazeProgress';
 
 const priorityConfig: { value: Priority; label: string; color: string }[] = [
   { value: 'low', label: 'Low', color: '#4ade80' },
@@ -14,11 +16,26 @@ interface Props { todo: Todo; }
 
 export function TodoItem({ todo }: Props) {
   const { dispatch } = useStore();
+  const { enabled, registerTarget, getProgress } = useGaze();
   const [expanded, setExpanded] = useState(false);
   const [newStep, setNewStep] = useState('');
   const [newTag, setNewTag] = useState('');
   const [editingText, setEditingText] = useState(false);
   const [textVal, setTextVal] = useState(todo.text);
+
+  const gazeExpandId = `todo-expand-${todo.id}`;
+  const gazeCheckId = `todo-check-${todo.id}`;
+
+  // Register gaze targets
+  useEffect(() => {
+    if (!enabled) return;
+    const u1 = registerTarget(gazeExpandId, () => setExpanded(true));
+    const u2 = registerTarget(gazeCheckId, () => dispatch({ type: 'TOGGLE_TODO', id: todo.id }));
+    return () => { u1(); u2(); };
+  }, [enabled, todo.id]);
+
+  const expandProgress = getProgress(gazeExpandId);
+  const checkProgress = getProgress(gazeCheckId);
 
   const p = priorityConfig.find(x => x.value === todo.priority)!;
   const isOverdue = todo.dueDate && !todo.completed && new Date(todo.dueDate) < new Date(new Date().toDateString());
@@ -47,21 +64,33 @@ export function TodoItem({ todo }: Props) {
       className={`todo-item-wrap ${todo.completed ? 'todo-item-wrap--done' : ''} ${expanded ? 'todo-item-wrap--expanded' : ''}`}
       onClick={() => !editingText && setExpanded(!expanded)}
     >
-      {/* ── Main row ── */}
       <div className="todo-row">
-        <button
-          className={`check-btn ${todo.completed ? 'check-btn--checked' : ''}`}
-          onClick={e => { e.stopPropagation(); dispatch({ type: 'TOGGLE_TODO', id: todo.id }); }}
-          style={{ '--p-color': p.color } as React.CSSProperties}
+        {/* Check button with gaze */}
+        <div
+          data-gaze-id={gazeCheckId}
+          style={{ position: 'relative', flexShrink: 0 }}
         >
-          {todo.completed && (
-            <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-              <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          )}
-        </button>
+          <button
+            className={`check-btn ${todo.completed ? 'check-btn--checked' : ''}`}
+            onClick={e => { e.stopPropagation(); dispatch({ type: 'TOGGLE_TODO', id: todo.id }); }}
+            style={{ '--p-color': p.color } as React.CSSProperties}
+          >
+            {todo.completed && (
+              <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </button>
+          {enabled && <GazeProgress progress={checkProgress} size={32} color="#4ade80" />}
+        </div>
 
-        <div className="todo-body" onClick={e => editingText && e.stopPropagation()}>
+        {/* Task body with gaze expand */}
+        <div
+          className="todo-body"
+          data-gaze-id={gazeExpandId}
+          style={{ position: 'relative' }}
+          onClick={e => editingText && e.stopPropagation()}
+        >
           {editingText ? (
             <input
               className="todo-text-input"
@@ -95,6 +124,16 @@ export function TodoItem({ todo }: Props) {
               <Flag size={9} />{p.label}
             </span>
           </div>
+          {/* Gaze progress overlay on task body */}
+          {enabled && expandProgress > 0 && (
+            <div style={{
+              position: 'absolute', inset: 0,
+              background: `rgba(0,120,212,${expandProgress * 0.08})`,
+              borderRadius: 8,
+              pointerEvents: 'none',
+              transition: 'background 0.05s',
+            }} />
+          )}
         </div>
 
         <button
@@ -105,11 +144,8 @@ export function TodoItem({ todo }: Props) {
         </button>
       </div>
 
-      {/* ── Expanded detail ── */}
       {expanded && (
         <div className="todo-detail" onClick={e => e.stopPropagation()}>
-
-          {/* Steps */}
           <div className="td-section">
             <div className="td-section-header">
               <span>Steps</span>
@@ -134,7 +170,6 @@ export function TodoItem({ todo }: Props) {
             </div>
           </div>
 
-          {/* Priority */}
           <div className="td-section">
             <div className="td-section-header"><Flag size={12} /><span>Priority</span></div>
             <div className="priority-pills">
@@ -149,14 +184,12 @@ export function TodoItem({ todo }: Props) {
             </div>
           </div>
 
-          {/* Due date */}
           <div className="td-section">
             <div className="td-section-header"><Calendar size={12} /><span>Due date</span></div>
             <input type="date" className="detail-input" value={todo.dueDate || ''}
               onChange={e => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { dueDate: e.target.value || undefined } })} />
           </div>
 
-          {/* Tags */}
           <div className="td-section">
             <div className="td-section-header"><Tag size={12} /><span>Tags</span></div>
             <div className="tags-list">
@@ -174,14 +207,12 @@ export function TodoItem({ todo }: Props) {
               onKeyDown={e => { if (e.key === 'Enter') addTag(); }} />
           </div>
 
-          {/* Notes */}
           <div className="td-section">
             <div className="td-section-header"><StickyNote size={12} /><span>Notes</span></div>
             <textarea className="notes-input" placeholder="Add a note..." value={todo.notes} rows={2}
               onChange={e => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { notes: e.target.value } })} />
           </div>
 
-          {/* Footer */}
           <div className="td-footer">
             <span className="detail-created">
               Created {new Date(todo.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
