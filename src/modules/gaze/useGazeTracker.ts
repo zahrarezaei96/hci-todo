@@ -1,6 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 
-const DWELL_TIME = 3000;
+const DWELL_TIME = 2500;
+const SMOOTH = 10;
+const DEAD_ZONE = 15;
 
 export interface GazeTarget {
   id: string;
@@ -17,6 +19,9 @@ export function useGazeTracker(enabled: boolean) {
   const targetsRef = useRef<Map<string, GazeTarget>>(new Map());
   const dwellRef = useRef<DwellState | null>(null);
   const progressCallbackRef = useRef<((id: string, progress: number) => void) | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   const registerTarget = useCallback((id: string, action: () => void) => {
     targetsRef.current.set(id, { id, action });
@@ -34,7 +39,7 @@ export function useGazeTracker(enabled: boolean) {
     const dot = document.createElement('div');
     dot.id = 'gaze-cursor-dot';
     dot.style.cssText = `
-      position: fixed; width: 22px; height: 22px;
+      position: fixed; width: 20px; height: 20px;
       border-radius: 50%;
       background: rgba(0,120,212,0.6);
       border: 3px solid #0078d4;
@@ -42,39 +47,91 @@ export function useGazeTracker(enabled: boolean) {
       transform: translate(-50%, -50%);
       box-shadow: 0 0 16px rgba(0,120,212,0.6);
       display: none;
-      transition: left 0.12s ease-out, top 0.12s ease-out;
+      transition: left 0.08s ease-out, top 0.08s ease-out;
     `;
     document.body.appendChild(dot);
 
-    const SMOOTH = 14;
-    const xBuf: number[] = [], yBuf: number[] = [];
-    let lastX = 0, lastY = 0;
-    const DEAD_ZONE = 18; // pixels — ignore movements smaller than this
+    // ── Video container (draggable) ──
+    const container = document.createElement('div');
+    container.id = 'gaze-video-container';
+    container.style.cssText = `
+      position: fixed; bottom: 16px; right: 16px;
+      width: 200px; height: 192px;
+      border-radius: 14px; overflow: hidden;
+      border: 2.5px solid #0078d4;
+      z-index: 9998; background: #000;
+    `;
+    containerRef.current = container;
 
-    function handleGaze(data: { x: number; y: number } | null) {
-      if (!data) return;
-      xBuf.push(data.x); yBuf.push(data.y);
+    const handle = document.createElement('div');
+    handle.style.cssText = `
+      width: 100%; height: 22px;
+      background: rgba(0,120,212,0.85);
+      cursor: grab; display: flex;
+      align-items: center; justify-content: center;
+      user-select: none; flex-shrink: 0;
+    `;
+    handle.innerHTML = `<span style="color:white;font-size:11px;font-family:sans-serif;">⠿ drag</span>`;
+
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+    video.muted = true;
+    video.style.cssText = `
+      width: 200px; height: 170px;
+      object-fit: cover; display: block;
+      transform: scaleX(-1);
+    `;
+    videoRef.current = video;
+
+    container.appendChild(handle);
+    container.appendChild(video);
+    document.body.appendChild(container);
+
+    // Drag logic
+    let dragging = false, sx = 0, sy = 0, sr = 16, sb = 16;
+    handle.addEventListener('mousedown', (e) => {
+      dragging = true; sx = e.clientX; sy = e.clientY;
+      const r = container.getBoundingClientRect();
+      sr = window.innerWidth - r.right; sb = window.innerHeight - r.bottom;
+      handle.style.cursor = 'grabbing'; e.preventDefault();
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      container.style.right = `${Math.max(0, sr - (e.clientX - sx))}px`;
+      container.style.bottom = `${Math.max(0, sb - (e.clientY - sy))}px`;
+      container.style.left = 'auto'; container.style.top = 'auto';
+    });
+    document.addEventListener('mouseup', () => { dragging = false; handle.style.cursor = 'grab'; });
+
+    // Smoothing
+    const xBuf: number[] = [], yBuf: number[] = [];
+    let lastX = -999, lastY = -999;
+
+    function processGaze(screenX: number, screenY: number) {
+      xBuf.push(screenX); yBuf.push(screenY);
       if (xBuf.length > SMOOTH) { xBuf.shift(); yBuf.shift(); }
       const rawX = xBuf.reduce((a, b) => a + b) / xBuf.length;
       const rawY = yBuf.reduce((a, b) => a + b) / yBuf.length;
 
-      // Dead zone — only move if displacement is significant
       const dx = Math.abs(rawX - lastX);
       const dy = Math.abs(rawY - lastY);
       if (dx < DEAD_ZONE && dy < DEAD_ZONE) return;
       lastX = rawX; lastY = rawY;
 
-      const x = rawX, y = rawY;
       dot.style.display = 'block';
-      dot.style.left = `${x}px`;
-      dot.style.top = `${y}px`;
+      dot.style.left = `${rawX}px`;
+      dot.style.top = `${rawY}px`;
 
+      // Check gaze targets
       let gazedId: string | null = null;
       targetsRef.current.forEach((_, id) => {
         const el = document.querySelector(`[data-gaze-id="${id}"]`);
         if (!el) return;
         const rect = el.getBoundingClientRect();
-        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) gazedId = id;
+        if (rawX >= rect.left && rawX <= rect.right && rawY >= rect.top && rawY <= rect.bottom) {
+          gazedId = id;
+        }
       });
 
       if (gazedId) {
@@ -102,90 +159,95 @@ export function useGazeTracker(enabled: boolean) {
       }
     }
 
-    function makeDraggable(el: HTMLElement) {
-      let dragging = false, sx = 0, sy = 0, sr = 16, sb = 16;
-      const handle = document.createElement('div');
-      handle.style.cssText = `
-        position:absolute; top:0; left:0; right:0; height:22px;
-        background:rgba(0,120,212,0.85); cursor:grab; z-index:10;
-        display:flex; align-items:center; justify-content:center;
-      `;
-      handle.innerHTML = `<span style="color:white;font-size:11px;user-select:none;font-family:sans-serif;">⠿ drag</span>`;
-      el.appendChild(handle);
-      handle.addEventListener('mousedown', (e) => {
-        dragging = true; sx = e.clientX; sy = e.clientY;
-        const r = el.getBoundingClientRect();
-        sr = window.innerWidth - r.right; sb = window.innerHeight - r.bottom;
-        handle.style.cursor = 'grabbing'; e.preventDefault();
-      });
-      document.addEventListener('mousemove', (e) => {
-        if (!dragging) return;
-        el.style.right = `${Math.max(0, sr - (e.clientX - sx))}px`;
-        el.style.bottom = `${Math.max(0, sb - (e.clientY - sy))}px`;
-        el.style.left = 'auto'; el.style.top = 'auto';
-      });
-      document.addEventListener('mouseup', () => { dragging = false; handle.style.cursor = 'grab'; });
-    }
+    // ── MediaPipe Face Landmarker ──
+    let faceLandmarker: any = null;
+    let running = true;
 
-    function applyVideoStyles() {
-      const container = document.getElementById('webgazerVideoContainer');
-      if (!container) { setTimeout(applyVideoStyles, 400); return; }
+    async function initMediaPipe() {
+      try {
+        const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
 
-      container.setAttribute('style', `
-        position: fixed !important; bottom: 16px !important; right: 16px !important;
-        top: auto !important; left: auto !important;
-        width: 200px !important; height: 192px !important;
-        border-radius: 14px !important; overflow: hidden !important;
-        border: 2.5px solid #0078d4 !important; z-index: 9998 !important;
-        background: #000 !important;
-      `);
+        const filesetResolver = await FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+        );
 
-      const video = document.getElementById('webgazerVideoFeed') as HTMLVideoElement;
-      if (video) {
-        video.setAttribute('style', `
-          width: 200px !important; height: 170px !important;
-          object-fit: cover !important; display: block !important;
-          transform: scaleX(-1) !important;
-          margin-top: 22px !important;
-        `);
-      }
+        faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+            delegate: 'GPU',
+          },
+          outputFaceBlendshapes: false,
+          outputFacialTransformationMatrixes: false,
+          runningMode: 'VIDEO',
+          numFaces: 1,
+        });
 
-      // Hide canvas overlays
-      container.querySelectorAll('canvas').forEach(c => {
-        (c as HTMLElement).setAttribute('style', 'display: none !important;');
-      });
+        // Get camera
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 480, facingMode: 'user' }
+        });
+        video.srcObject = stream;
+        await video.play();
 
-      if (!container.dataset.draggable) {
-        container.dataset.draggable = '1';
-        makeDraggable(container);
+        console.log('MediaPipe Face Landmarker ready');
+        detect();
+      } catch (err) {
+        console.error('MediaPipe init error:', err);
       }
     }
 
-    // Load local webgazer
-    const script = document.createElement('script');
-    script.src = '/webgazer.js';
+    function detect() {
+      if (!running || !faceLandmarker || !videoRef.current) return;
 
-    script.onload = () => {
-      const wg = (window as any).webgazer;
-      if (!wg) return;
-      console.log('WebGazer loaded');
-      wg.setGazeListener(handleGaze);
-      wg.showVideoPreview(true);
-      wg.showPredictionPoints(false);
-      wg.begin();
-      [600, 1200, 2000, 3000].forEach(t => setTimeout(applyVideoStyles, t));
-    };
+      const v = videoRef.current;
+      if (v.readyState >= 2) {
+        const results = faceLandmarker.detectForVideo(v, performance.now());
 
-    script.onerror = () => console.error('webgazer.js not found');
-    document.head.appendChild(script);
+        if (results?.faceLandmarks?.[0]) {
+          const landmarks = results.faceLandmarks[0];
+
+          // Iris landmarks: 468-471 = left iris, 473-476 = right iris
+          // Use left iris center (landmark 468) and right iris center (473)
+          const leftIris = landmarks[468];
+          const rightIris = landmarks[473];
+
+          if (leftIris && rightIris) {
+            // Average of both irises — mirror the x because video is mirrored
+            const irisX = 1 - ((leftIris.x + rightIris.x) / 2);
+            const irisY = (leftIris.y + rightIris.y) / 2;
+
+            // Map iris position to screen
+            // Iris typically moves in a smaller range, so we scale it up
+            const scaleX = 2.2;
+            const scaleY = 2.8;
+            const centerX = 0.5, centerY = 0.42;
+
+            const screenX = window.innerWidth * (centerX + (irisX - centerX) * scaleX);
+            const screenY = window.innerHeight * (centerY + (irisY - centerY) * scaleY);
+
+            processGaze(
+              Math.max(0, Math.min(window.innerWidth, screenX)),
+              Math.max(0, Math.min(window.innerHeight, screenY))
+            );
+          }
+        }
+      }
+
+      animFrameRef.current = requestAnimationFrame(detect);
+    }
+
+    initMediaPipe();
 
     return () => {
-      dot.remove();
+      running = false;
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (dwellRef.current?.timer) clearTimeout(dwellRef.current.timer);
       dwellRef.current = null;
-      try { (window as any).webgazer?.end(); } catch (_) {}
-      script.remove();
-      document.getElementById('webgazerVideoContainer')?.remove();
+      dot.remove();
+      container.remove();
+      // Stop camera
+      const stream = videoRef.current?.srcObject as MediaStream;
+      stream?.getTracks().forEach(t => t.stop());
     };
   }, [enabled]);
 
