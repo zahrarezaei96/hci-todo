@@ -1,8 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 
 const DWELL_TIME = 2500;
-const SMOOTH = 10;
-const DEAD_ZONE = 15;
+const SMOOTH = 8;
+const DEAD_ZONE = 10;
 
 export interface GazeTarget {
   id: string;
@@ -21,7 +21,8 @@ export function useGazeTracker(enabled: boolean) {
   const progressCallbackRef = useRef<((id: string, progress: number) => void) | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const landmarkerRef = useRef<any>(null);
+  const runningRef = useRef(false);
 
   const registerTarget = useCallback((id: string, action: () => void) => {
     targetsRef.current.set(id, { id, action });
@@ -47,7 +48,7 @@ export function useGazeTracker(enabled: boolean) {
       transform: translate(-50%, -50%);
       box-shadow: 0 0 16px rgba(0,120,212,0.6);
       display: none;
-      transition: left 0.08s ease-out, top 0.08s ease-out;
+      transition: left 0.06s ease-out, top 0.06s ease-out;
     `;
     document.body.appendChild(dot);
 
@@ -61,7 +62,6 @@ export function useGazeTracker(enabled: boolean) {
       border: 2.5px solid #0078d4;
       z-index: 9998; background: #000;
     `;
-    containerRef.current = container;
 
     const handle = document.createElement('div');
     handle.style.cssText = `
@@ -69,7 +69,7 @@ export function useGazeTracker(enabled: boolean) {
       background: rgba(0,120,212,0.85);
       cursor: grab; display: flex;
       align-items: center; justify-content: center;
-      user-select: none; flex-shrink: 0;
+      user-select: none;
     `;
     handle.innerHTML = `<span style="color:white;font-size:11px;font-family:sans-serif;">⠿ drag</span>`;
 
@@ -88,7 +88,7 @@ export function useGazeTracker(enabled: boolean) {
     container.appendChild(video);
     document.body.appendChild(container);
 
-    // Drag logic
+    // Drag
     let dragging = false, sx = 0, sy = 0, sr = 16, sb = 16;
     handle.addEventListener('mousedown', (e) => {
       dragging = true; sx = e.clientX; sy = e.clientY;
@@ -108,30 +108,86 @@ export function useGazeTracker(enabled: boolean) {
     const xBuf: number[] = [], yBuf: number[] = [];
     let lastX = -999, lastY = -999;
 
-    function processGaze(screenX: number, screenY: number) {
+    // Calibration offset — user clicks to set reference point
+    let offsetX = 0, offsetY = 0;
+    let refNoseX = 0.5, refNoseY = 0.4;
+    let calibrated = false;
+
+    // Show calibration hint
+    const hint = document.createElement('div');
+    hint.style.cssText = `
+      position: fixed; top: 16px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,120,212,0.9); color: white;
+      padding: 10px 20px; border-radius: 10px;
+      font-size: 13px; font-family: sans-serif;
+      z-index: 999998; pointer-events: none;
+    `;
+    hint.textContent = '👃 Look straight at the screen and press Space to calibrate';
+    document.body.appendChild(hint);
+
+    function calibrate(noseX: number, noseY: number) {
+      refNoseX = noseX;
+      refNoseY = noseY;
+      offsetX = window.innerWidth / 2 - (noseX * window.innerWidth);
+      offsetY = window.innerHeight / 2 - (noseY * window.innerHeight);
+      calibrated = true;
+      hint.textContent = '✓ Calibrated! Move your nose to control the cursor';
+      setTimeout(() => hint.remove(), 3000);
+    }
+
+    const onSpace = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && landmarkerRef.current) {
+        const v = videoRef.current;
+        if (!v || v.readyState < 2) return;
+        const results = landmarkerRef.current.detectForVideo(v, performance.now());
+        if (results?.faceLandmarks?.[0]) {
+          // Nose tip = landmark 4
+          const nose = results.faceLandmarks[0][4];
+          calibrate(nose.x, nose.y);
+        }
+      }
+    };
+    window.addEventListener('keydown', onSpace);
+
+    function processNose(noseX: number, noseY: number) {
+      // Scale nose movement to screen
+      const SCALE = 3.5;
+      let screenX: number, screenY: number;
+
+      if (calibrated) {
+        // Mirror X: نوک بینی وقتی به چپ میره cursor به راست بره
+        const dx = (refNoseX - noseX) * SCALE;
+        const dy = (noseY - refNoseY) * SCALE;
+        screenX = window.innerWidth / 2 + dx * window.innerWidth;
+        screenY = window.innerHeight / 2 + dy * window.innerHeight;
+      } else {
+        screenX = noseX * window.innerWidth;
+        screenY = noseY * window.innerHeight;
+      }
+
+      screenX = Math.max(0, Math.min(window.innerWidth, screenX));
+      screenY = Math.max(0, Math.min(window.innerHeight, screenY));
+
       xBuf.push(screenX); yBuf.push(screenY);
       if (xBuf.length > SMOOTH) { xBuf.shift(); yBuf.shift(); }
-      const rawX = xBuf.reduce((a, b) => a + b) / xBuf.length;
-      const rawY = yBuf.reduce((a, b) => a + b) / yBuf.length;
+      const x = xBuf.reduce((a, b) => a + b) / xBuf.length;
+      const y = yBuf.reduce((a, b) => a + b) / yBuf.length;
 
-      const dx = Math.abs(rawX - lastX);
-      const dy = Math.abs(rawY - lastY);
-      if (dx < DEAD_ZONE && dy < DEAD_ZONE) return;
-      lastX = rawX; lastY = rawY;
+      if (Math.abs(x - lastX) < DEAD_ZONE && Math.abs(y - lastY) < DEAD_ZONE) return;
+      lastX = x; lastY = y;
 
       dot.style.display = 'block';
-      dot.style.left = `${rawX}px`;
-      dot.style.top = `${rawY}px`;
+      dot.style.left = `${x}px`;
+      dot.style.top = `${y}px`;
 
-      // Check gaze targets
+      // Check dwell targets
       let gazedId: string | null = null;
       targetsRef.current.forEach((_, id) => {
         const el = document.querySelector(`[data-gaze-id="${id}"]`);
         if (!el) return;
         const rect = el.getBoundingClientRect();
-        if (rawX >= rect.left && rawX <= rect.right && rawY >= rect.top && rawY <= rect.bottom) {
-          gazedId = id;
-        }
+        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) gazedId = id;
       });
 
       if (gazedId) {
@@ -160,10 +216,7 @@ export function useGazeTracker(enabled: boolean) {
     }
 
     // ── MediaPipe Face Landmarker ──
-    let faceLandmarker: any = null;
-    let running = true;
-
-    async function initMediaPipe() {
+    async function init() {
       try {
         const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
 
@@ -171,7 +224,7 @@ export function useGazeTracker(enabled: boolean) {
           'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
         );
 
-        faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+        landmarkerRef.current = await FaceLandmarker.createFromOptions(filesetResolver, {
           baseOptions: {
             modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
             delegate: 'GPU',
@@ -182,70 +235,44 @@ export function useGazeTracker(enabled: boolean) {
           numFaces: 1,
         });
 
-        // Get camera
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480, facingMode: 'user' }
         });
         video.srcObject = stream;
         await video.play();
 
-        console.log('MediaPipe Face Landmarker ready');
+        console.log('Nose tracking ready — press Space to calibrate');
+        runningRef.current = true;
         detect();
       } catch (err) {
-        console.error('MediaPipe init error:', err);
+        console.error('Init error:', err);
       }
     }
 
     function detect() {
-      if (!running || !faceLandmarker || !videoRef.current) return;
-
+      if (!runningRef.current || !landmarkerRef.current) return;
       const v = videoRef.current;
-      if (v.readyState >= 2) {
-        const results = faceLandmarker.detectForVideo(v, performance.now());
-
+      if (v && v.readyState >= 2) {
+        const results = landmarkerRef.current.detectForVideo(v, performance.now());
         if (results?.faceLandmarks?.[0]) {
-          const landmarks = results.faceLandmarks[0];
-
-          // Iris landmarks: 468-471 = left iris, 473-476 = right iris
-          // Use left iris center (landmark 468) and right iris center (473)
-          const leftIris = landmarks[468];
-          const rightIris = landmarks[473];
-
-          if (leftIris && rightIris) {
-            // Average of both irises — mirror the x because video is mirrored
-            const irisX = 1 - ((leftIris.x + rightIris.x) / 2);
-            const irisY = (leftIris.y + rightIris.y) / 2;
-
-            // Map iris position to screen
-            // Iris typically moves in a smaller range, so we scale it up
-            const scaleX = 2.2;
-            const scaleY = 2.8;
-            const centerX = 0.5, centerY = 0.42;
-
-            const screenX = window.innerWidth * (centerX + (irisX - centerX) * scaleX);
-            const screenY = window.innerHeight * (centerY + (irisY - centerY) * scaleY);
-
-            processGaze(
-              Math.max(0, Math.min(window.innerWidth, screenX)),
-              Math.max(0, Math.min(window.innerHeight, screenY))
-            );
-          }
+          const nose = results.faceLandmarks[0][4]; // nose tip
+          if (nose) processNose(nose.x, nose.y);
         }
       }
-
       animFrameRef.current = requestAnimationFrame(detect);
     }
 
-    initMediaPipe();
+    init();
 
     return () => {
-      running = false;
+      runningRef.current = false;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (dwellRef.current?.timer) clearTimeout(dwellRef.current.timer);
       dwellRef.current = null;
       dot.remove();
       container.remove();
-      // Stop camera
+      hint.remove();
+      window.removeEventListener('keydown', onSpace);
       const stream = videoRef.current?.srcObject as MediaStream;
       stream?.getTracks().forEach(t => t.stop());
     };
