@@ -20,6 +20,8 @@ export function TodoItem({ todo }: Props) {
   const [newTag, setNewTag] = useState('');
   const [editingText, setEditingText] = useState(false);
   const [textVal, setTextVal] = useState(todo.text);
+  const [previewDate, setPreviewDate] = useState<string | null>(null);
+  const [showConfirmed, setShowConfirmed] = useState(false);
 
   const p = priorityConfig.find(x => x.value === todo.priority)!;
   const isOverdue = todo.dueDate && !todo.completed && new Date(todo.dueDate) < new Date(new Date().toDateString());
@@ -29,6 +31,15 @@ export function TodoItem({ todo }: Props) {
     if (textVal.trim()) dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { text: textVal.trim() } });
     setEditingText(false);
   }
+
+  function getShiftedDate(days: number) {
+  const baseDate = previewDate || todo.dueDate || new Date().toISOString().split('T')[0];
+  const currentDate = new Date(baseDate + 'T00:00:00');
+
+  currentDate.setDate(currentDate.getDate() + days);
+
+  return currentDate.toISOString().split('T')[0];
+}
 
   function addStep() {
     if (!newStep.trim()) return;
@@ -155,66 +166,69 @@ export function TodoItem({ todo }: Props) {
             <div className="td-section-header"><Calendar size={12} /><span>Due date</span></div>
             <input type="date" className="detail-input" value={todo.dueDate || ''}
               onChange={e => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { dueDate: e.target.value || undefined } })} />
+              {previewDate && (
+  <div
+    style={{
+      marginTop: "8px",
+      padding: "8px",
+      borderRadius: "8px",
+      backgroundColor: "#fff3cd",
+      color: "#856404",
+      fontSize: "13px",
+    }}
+  >
+    Preview date: {previewDate} — show 👍 to confirm
+  </div>
+)}
+{showConfirmed && (
+  <div
+    style={{
+      marginTop: "8px",
+      padding: "8px",
+      borderRadius: "8px",
+      backgroundColor: "#d4edda",
+      color: "#155724",
+      fontSize: "13px",
+      fontWeight: "bold",
+    }}
+  >
+    ✅ Date Confirmed
+  </div>
+)}
               <GestureDateControl
   onSwipeRight={() => {
-    const baseDate = todo.dueDate || new Date().toISOString().split('T')[0];
-    const currentDate = new Date(baseDate + 'T00:00:00');
-
-    currentDate.setDate(currentDate.getDate() + 1);
-
-    dispatch({
-      type: 'UPDATE_TODO',
-      id: todo.id,
-      updates: {
-        dueDate: currentDate.toISOString().split('T')[0],
-      },
-    });
-  }}
+  setPreviewDate(getShiftedDate(1));
+}}
 
   onSwipeLeft={() => {
-    const baseDate = todo.dueDate || new Date().toISOString().split('T')[0];
-    const currentDate = new Date(baseDate + 'T00:00:00');
-
-    currentDate.setDate(currentDate.getDate() - 1);
-
-    dispatch({
-      type: 'UPDATE_TODO',
-      id: todo.id,
-      updates: {
-        dueDate: currentDate.toISOString().split('T')[0],
-      },
-    });
-  }}
-
+  setPreviewDate(getShiftedDate(-1));
+}}
   onSwipeUp={() => {
-    const baseDate = todo.dueDate || new Date().toISOString().split('T')[0];
-    const currentDate = new Date(baseDate + 'T00:00:00');
-
-    currentDate.setDate(currentDate.getDate() - 7);
-
-    dispatch({
-      type: 'UPDATE_TODO',
-      id: todo.id,
-      updates: {
-        dueDate: currentDate.toISOString().split('T')[0],
-      },
-    });
-  }}
+  setPreviewDate(getShiftedDate(-7));
+}}
 
   onSwipeDown={() => {
-    const baseDate = todo.dueDate || new Date().toISOString().split('T')[0];
-    const currentDate = new Date(baseDate + 'T00:00:00');
+  setPreviewDate(getShiftedDate(7));
+}}
 
-    currentDate.setDate(currentDate.getDate() + 7);
+onThumbsUp={() => {
+  if (!previewDate) return;
 
-    dispatch({
-      type: 'UPDATE_TODO',
-      id: todo.id,
-      updates: {
-        dueDate: currentDate.toISOString().split('T')[0],
-      },
-    });
-  }}
+  dispatch({
+    type: 'UPDATE_TODO',
+    id: todo.id,
+    updates: {
+      dueDate: previewDate,
+    },
+  });
+
+  setPreviewDate(null);
+  setShowConfirmed(true);
+
+setTimeout(() => {
+  setShowConfirmed(false);
+}, 3000);
+}}
 />
           </div>
 

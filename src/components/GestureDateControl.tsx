@@ -7,6 +7,7 @@ type Props = {
   onSwipeDown?: () => void;
   onSwipeLeft?: () => void;
   onSwipeRight?: () => void;
+  onThumbsUp?: () => void;
 };
 
 export default function GestureDateControl({
@@ -14,7 +15,8 @@ export default function GestureDateControl({
   onSwipeDown,
   onSwipeLeft,
   onSwipeRight,
-}: Props) {
+  onThumbsUp,
+}: Props)  {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const lastXRef = useRef<number | null>(null);
   const lastYRef = useRef<number | null>(null);
@@ -22,6 +24,7 @@ export default function GestureDateControl({
 
   const [gestureMode, setGestureMode] = useState(false);
   const [status, setStatus] = useState("Gesture mode off");
+  const [lastGesture, setLastGesture] = useState("None");
 
   useEffect(() => {
     if (!gestureMode || !videoRef.current) return;
@@ -45,6 +48,17 @@ export default function GestureDateControl({
       }
 
       const wrist = results.multiHandLandmarks[0][0];
+      const thumbTip = results.multiHandLandmarks[0][4];
+const indexTip = results.multiHandLandmarks[0][8];
+const middleTip = results.multiHandLandmarks[0][12];
+const ringTip = results.multiHandLandmarks[0][16];
+const pinkyTip = results.multiHandLandmarks[0][20];
+
+const isThumbsUp =
+  thumbTip.y < indexTip.y &&
+  thumbTip.y < middleTip.y &&
+  thumbTip.y < ringTip.y &&
+  thumbTip.y < pinkyTip.y;
       const currentX = wrist.x;
       const currentY = wrist.y;
 
@@ -56,23 +70,35 @@ export default function GestureDateControl({
         const movementY = currentY - previousY;
         const now = Date.now();
 if (now - lastGestureTimeRef.current > 800) {
+
+    if (isThumbsUp) {
+  setStatus("Thumbs up detected 👍");
+  setLastGesture("👍 Confirm Date");
+  onThumbsUp?.();
+  lastGestureTimeRef.current = now;
+  return;
+}
   const absX = Math.abs(movementX);
   const absY = Math.abs(movementY);
 
   if (absY > absX && movementY < -0.08) {
     setStatus("Swipe up detected ↑");
+    setLastGesture("⬆️ Previous Week");
     onSwipeUp?.();
     lastGestureTimeRef.current = now;
   } else if (absY > absX && movementY > 0.08) {
     setStatus("Swipe down detected ↓");
+    setLastGesture("⬇️ Next Week");
     onSwipeDown?.();
     lastGestureTimeRef.current = now;
   } else if (absX > absY && movementX > 0.08) {
     setStatus("Swipe right detected → next date");
+    setLastGesture("👉 Next Day");
     onSwipeRight?.();
     lastGestureTimeRef.current = now;
   } else if (absX > absY && movementX < -0.08) {
     setStatus("Swipe left detected → previous date");
+    setLastGesture("👈 Previous Day");
     onSwipeLeft?.();
     lastGestureTimeRef.current = now;
   } else {
@@ -109,7 +135,13 @@ if (now - lastGestureTimeRef.current > 800) {
         {gestureMode ? "Disable Gesture Mode" : "Enable Gesture Mode"}
       </button>
 
-      <p>{status}</p>
+      <div style={{ marginTop: "8px", fontSize: "13px" }}>
+  <p><strong>Status:</strong> {status}</p>
+  <p><strong>Last gesture:</strong> {lastGesture}</p>
+  <p style={{ fontSize: "12px", opacity: 0.75 }}>
+    Swipe ← / → for days, ↑ / ↓ for weeks
+  </p>
+</div>
 
       {gestureMode && (
         <video
@@ -121,6 +153,36 @@ if (now - lastGestureTimeRef.current > 800) {
           }}
         />
       )}
+
+      <div
+  style={{
+    marginTop: "12px",
+    padding: "10px",
+    border: "1px solid #444",
+    borderRadius: "8px",
+    fontSize: "12px",
+    backgroundColor: "#1f1f1f",
+    color: "white",
+  }}
+>
+  <strong>🎮 Gesture Guide</strong>
+
+  <div style={{ marginTop: "6px" }}>
+    👈 Swipe Left → Previous Day
+  </div>
+
+  <div>
+    👉 Swipe Right → Next Day
+  </div>
+
+  <div>
+    ⬆️ Swipe Up → Previous Week
+  </div>
+
+  <div>
+    ⬇️ Swipe Down → Next Week
+  </div>
+</div>
     </div>
   );
 }
