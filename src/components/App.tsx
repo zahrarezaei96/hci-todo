@@ -107,9 +107,9 @@ export function App() {
       const dist = Math.sqrt(dx * dx + dy * dy);
 
       const alpha =
-        dist > 200 ? 0.3  :
-        dist > 80  ? 0.15 :
-                     0.06;
+        dist > 200 ? 0.4  :
+        dist > 80  ? 0.25 :
+                     0.12;
 
       smoothX.current = smoothX.current * (1 - alpha) + targetX * alpha;
       smoothY.current = smoothY.current * (1 - alpha) + targetY * alpha;
