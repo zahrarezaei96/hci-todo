@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { useGazeTracker } from './useGazeTracker';
-import { GazeCalibration } from './GazeCalibration';
 
 interface GazeContextType {
   enabled: boolean;
@@ -13,7 +12,6 @@ const GazeContext = createContext<GazeContextType | null>(null);
 
 export function GazeProvider({ children }: { children: ReactNode }) {
   const [enabled, setEnabled] = useState(false);
-  const [calibrating, setCalibrating] = useState(false);
   const [progressMap, setProgressMap] = useState<Record<string, number>>({});
 
   const { registerTarget, setProgressCallback } = useGazeTracker(enabled);
@@ -22,26 +20,12 @@ export function GazeProvider({ children }: { children: ReactNode }) {
     setProgressMap(prev => ({ ...prev, [id]: progress }));
   });
 
-  const toggleGaze = useCallback(() => {
-    setEnabled(prev => {
-      if (!prev) {
-        // turning on — show calibration first
-        setCalibrating(true);
-        return true;
-      } else {
-        return false;
-      }
-    });
-  }, []);
-
+  const toggleGaze = useCallback(() => setEnabled(e => !e), []);
   const getProgress = useCallback((id: string) => progressMap[id] ?? 0, [progressMap]);
 
   return (
     <GazeContext.Provider value={{ enabled, toggleGaze, registerTarget, getProgress }}>
       {children}
-      {calibrating && (
-        <GazeCalibration onComplete={() => setCalibrating(false)} />
-      )}
     </GazeContext.Provider>
   );
 }
