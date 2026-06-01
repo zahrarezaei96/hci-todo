@@ -93,3 +93,4 @@ export function GazeCalibration({ onComplete }: Props) {
     </div>
   );
 }
+
