@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 
-const DWELL_TIME = 2500;
+const DWELL_TIME = 1250;
 const SMOOTH = 8;
 const DEAD_ZONE = 10;
 
