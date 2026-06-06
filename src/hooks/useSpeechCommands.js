@@ -55,27 +55,26 @@ export function startSpeechRecognition() {
         }
       }
 
-      // CLICK
-
-      if (text.includes("click")) {
-
-        console.log("CLICK COMMAND DETECTED");
-
-        if (hoveredElement) {
-          hoveredElement.click();
-        }
-      }
-
+      
       // CHECK
-
       if (text.includes("check")) {
+  console.log("CHECK COMMAND DETECTED");
 
-        console.log("CHECK COMMAND DETECTED");
+  const todoItem = hoveredElement?.closest(".todo-item-wrap");
 
-        if (hoveredElement) {
-          hoveredElement.click();
-        }
-      }
+  if (!todoItem) {
+    console.log("No todo item found");
+    return;
+  }
+
+  const checkButton = todoItem.querySelector(".check-btn");
+
+  if (checkButton) {
+    checkButton.click();
+  } else {
+    console.log("Check button not found");
+  }
+}
 
       // OPEN
 
@@ -89,15 +88,24 @@ export function startSpeechRecognition() {
       }
 
       // DELETE
+if (text.includes("delete")) {
+  console.log("DELETE COMMAND DETECTED");
 
-      if (text.includes("delete")) {
+  const todoItem = hoveredElement?.closest(".todo-item-wrap");
 
-        console.log("DELETE COMMAND DETECTED");
+  if (!todoItem) {
+    console.log("No todo item found");
+    return;
+  }
 
-        if (hoveredElement) {
-          hoveredElement.click();
-        }
-      }
+  const deleteButton = todoItem.querySelector(".detail-delete");
+
+  if (deleteButton) {
+    deleteButton.click();
+  } else {
+    console.log("Delete button not found. Open the task first.");
+  }
+}
     }
   };
 
