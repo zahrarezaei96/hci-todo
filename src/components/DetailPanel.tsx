@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../store';
 import { X, Plus, Trash2, Star, Calendar, Flag, Tag, StickyNote, ChevronRight } from 'lucide-react';
 import { Priority } from '../types';
+import GestureDateControl from "./GestureDateControl";
 
 const priorityOptions: { value: Priority; label: string; color: string }[] = [
   { value: 'low', label: 'Low', color: '#4ade80' },
@@ -126,11 +127,24 @@ export function DetailPanel() {
             <span>Due Date</span>
           </div>
           <input
-            type="date"
-            className="detail-input"
-            value={todo.dueDate || ''}
-            onChange={e => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { dueDate: e.target.value || undefined } })}
-          />
+  type="date"
+  className="detail-input"
+  value={todo.dueDate || ''}
+  onChange={e =>
+    dispatch({
+      type: 'UPDATE_TODO',
+      id: todo.id,
+      updates: { dueDate: e.target.value || undefined }
+    })
+  }
+/>
+
+<GestureDateControl
+  onSwipeRight={() => console.log("Swipe right")}
+  onSwipeLeft={() => console.log("Swipe left")}
+  onSwipeUp={() => console.log("Swipe up")}
+  onSwipeDown={() => console.log("Swipe down")}
+/>
         </div>
 
         {/* Reminder */}
