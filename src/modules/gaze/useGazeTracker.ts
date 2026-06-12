@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
+import { handsManager } from './handsManager';
 
 const SMOOTH = 8;
 const DEAD_ZONE = 10;
@@ -204,40 +205,35 @@ export function useGazeTracker(enabled: boolean) {
     }
 
     function initHandScroll(stream: MediaStream) {
-      import('@mediapipe/hands').then(({ Hands }) => {
-        const hands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+      // Use singleton handsManager — prevents multiple Hands instances loading simultaneously
+      let anchorY: number | null = null;
+      let lastGestureTime = 0;
+      const SWIPE_THRESHOLD = 0.06;
+      const GESTURE_COOLDOWN = 600;
 
-        hands.onResults((results: any) => {
-          if (!results.multiHandLandmarks?.length) { handScrollRef.lastY = null; return; }
-          const wristY = results.multiHandLandmarks[0][0].y;
-          const now = Date.now();
-          if (handScrollRef.lastY !== null && now - handScrollRef.lastTime > 150) {
-            const dy = wristY - handScrollRef.lastY;
-            if (Math.abs(dy) > 0.03) {
-              // Smart scroll: use global ref set by CustomSelect when dropdown is open
-              const openDropdownRef = (window as any).__openDropdownRef;
-              const openDropdown = openDropdownRef?.current as HTMLElement;
-              if (openDropdown) {
-                openDropdown.scrollTop += dy > 0 ? 80 : -80;
-              } else {
-                const taskList = (document.querySelector('.task-list') || document.querySelector('.ob-card')) as HTMLElement;
-                taskList?.scrollBy({ top: dy > 0 ? 150 : -150, behavior: 'smooth' });
-              }
-              handScrollRef.lastTime = now;
-            }
+      handsManager.subscribe('gazeTracker', (results: any) => {
+        if (!results.multiHandLandmarks?.length) { anchorY = null; return; }
+        const wristY = results.multiHandLandmarks[0][0].y;
+        const now = Date.now();
+
+        if (anchorY === null) { anchorY = wristY; return; }
+        const delta = wristY - anchorY;
+
+        if (Math.abs(delta) > SWIPE_THRESHOLD && now - lastGestureTime > GESTURE_COOLDOWN) {
+          const openDropdownRef = (window as any).__openDropdownRef;
+          const openDropdown = openDropdownRef?.current as HTMLElement;
+          if (openDropdown) {
+            openDropdown.scrollTop += delta > 0 ? 100 : -100;
+          } else {
+            const taskList = (document.querySelector('.task-list') || document.querySelector('.ob-card')) as HTMLElement;
+            taskList?.scrollBy({ top: delta > 0 ? 150 : -150, behavior: 'smooth' });
           }
-          handScrollRef.lastY = wristY;
-        });
+          lastGestureTime = now;
+          anchorY = wristY;
+        }
+      });
 
-        // Feed same video frames to hand model
-        const feedHands = async () => {
-          if (!runningRef.current) return;
-          if (video.readyState >= 2) await hands.send({ image: video });
-          setTimeout(feedHands, 33);
-        };
-        setTimeout(feedHands, 500);
-      }).catch(() => {});
+      handsManager.setVideo(video);
     }
 
     function detect() {
@@ -259,6 +255,8 @@ export function useGazeTracker(enabled: boolean) {
       clearTimeout(initTimer);
       runningRef.current = false;
       cancelAnimationFrame(animFrameRef.current);
+      handsManager.unsubscribe('gazeTracker');
+      handsManager.setVideo(null);
       try { dot.remove(); } catch(_) {}
       try { container.remove(); } catch(_) {}
       try { hint.remove(); } catch(_) {}

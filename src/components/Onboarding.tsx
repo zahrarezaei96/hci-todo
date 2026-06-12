@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { CustomSelect } from './CustomSelect';
 import { ChevronRight, ChevronLeft, Check, Eye, EyeOff, Mic, MicOff } from 'lucide-react';
 import { startSpeechRecognition } from '../hooks/useSpeechCommands';
+import { handsManager } from '../modules/gaze/handsManager';
 
 interface Profile {
   name: string;
@@ -130,37 +131,33 @@ export function Onboarding({ onComplete }: Props) {
     }
 
     function initHandScroll(vid: HTMLVideoElement) {
-      import('@mediapipe/hands').then(({ Hands }) => {
-        const hands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
-        let lastY: number | null = null, lastTime = 0;
-        hands.onResults((results: any) => {
-          if (!results.multiHandLandmarks?.length) { lastY = null; return; }
-          const wristY = results.multiHandLandmarks[0][0].y;
-          const now = Date.now();
-          if (lastY !== null && now - lastTime > 150) {
-            const dy = wristY - lastY;
-            if (Math.abs(dy) > 0.03) {
-              const openDropdownRef = (window as any).__openDropdownRef;
-              const openDropdown = openDropdownRef?.current as HTMLElement;
-              if (openDropdown) {
-                openDropdown.scrollTop += dy > 0 ? 80 : -80;
-              } else {
-                const card = document.querySelector('.ob-card') as HTMLElement;
-                card?.scrollBy({ top: dy > 0 ? 100 : -100, behavior: 'smooth' });
-              }
-              lastTime = now;
-            }
+      // Use singleton — no new Hands instance
+      let anchorY: number | null = null;
+      let lastGestureTime = 0;
+      const SWIPE_THRESHOLD = 0.06;
+      const GESTURE_COOLDOWN = 600;
+
+      handsManager.subscribe('onboarding', (results: any) => {
+        if (!results.multiHandLandmarks?.length) { anchorY = null; return; }
+        const wristY = results.multiHandLandmarks[0][0].y;
+        const now = Date.now();
+        if (anchorY === null) { anchorY = wristY; return; }
+        const delta = wristY - anchorY;
+        if (Math.abs(delta) > SWIPE_THRESHOLD && now - lastGestureTime > GESTURE_COOLDOWN) {
+          const openDropdownRef = (window as any).__openDropdownRef;
+          const openDropdown = openDropdownRef?.current as HTMLElement;
+          if (openDropdown) {
+            openDropdown.scrollTop += delta > 0 ? 100 : -100;
+          } else {
+            const card = document.querySelector('.ob-card') as HTMLElement;
+            card?.scrollBy({ top: delta > 0 ? 120 : -120, behavior: 'smooth' });
           }
-          lastY = wristY;
-        });
-        const feed = async () => {
-          if (!runRef.current) return;
-          if (vid.readyState >= 2) await hands.send({ image: vid });
-          setTimeout(feed, 33);
-        };
-        setTimeout(feed, 1000);
-      }).catch(() => {});
+          lastGestureTime = now;
+          anchorY = wristY;
+        }
+      });
+
+      handsManager.setVideo(vid);
     }
 
     function processNose(noseX: number, noseY: number) {
@@ -198,6 +195,8 @@ export function Onboarding({ onComplete }: Props) {
     return () => {
       runRef.current = false;
       cancelAnimationFrame(animRef.current);
+      handsManager.unsubscribe('onboarding');
+      handsManager.setVideo(null);
       window.removeEventListener('keydown', onSpace);
       try { document.getElementById('gaze-cursor-dot')?.remove(); } catch(_) {}
       try { container.remove(); } catch(_) {}

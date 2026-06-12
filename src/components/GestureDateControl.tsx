@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Hands } from "@mediapipe/hands";
-import { Camera } from "@mediapipe/camera_utils";
+import { handsManager } from "../modules/gaze/handsManager";
 
 type Props = {
   onSwipeUp?: () => void;
@@ -9,38 +8,38 @@ type Props = {
   onSwipeRight?: () => void;
 };
 
+// Unique ID counter so multiple GestureDateControl instances don't clash
+let idCounter = 0;
+
 export default function GestureDateControl({
   onSwipeUp,
   onSwipeDown,
   onSwipeLeft,
   onSwipeRight,
 }: Props) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const lastXRef = useRef<number | null>(null);
-  const lastYRef = useRef<number | null>(null);
+  const instanceId = useRef(`gesture-date-${++idCounter}`);
   const lastGestureTimeRef = useRef<number>(0);
+  const anchorXRef = useRef<number | null>(null);
+  const anchorYRef = useRef<number | null>(null);
 
   const [gestureMode, setGestureMode] = useState(false);
   const [status, setStatus] = useState("Gesture mode off");
 
   useEffect(() => {
-    if (!gestureMode || !videoRef.current) return;
+    if (!gestureMode) {
+      handsManager.unsubscribe(instanceId.current);
+      setStatus("Gesture mode off");
+      return;
+    }
 
-    const hands = new Hands({
-      locateFile: file =>
-        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
-    });
+    const SWIPE_THRESHOLD = 0.06;
+    const GESTURE_COOLDOWN = 800;
 
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.7,
-    });
-
-    hands.onResults(results => {
+    handsManager.subscribe(instanceId.current, (results) => {
       if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
         setStatus("No hand detected");
+        anchorXRef.current = null;
+        anchorYRef.current = null;
         return;
       }
 
@@ -48,58 +47,56 @@ export default function GestureDateControl({
       const currentX = wrist.x;
       const currentY = wrist.y;
 
-      const previousX = lastXRef.current;
-      const previousY = lastYRef.current;
-
-      if (previousX !== null && previousY !== null) {
-        const movementX = currentX - previousX;
-        const movementY = currentY - previousY;
-        const now = Date.now();
-if (now - lastGestureTimeRef.current > 800) {
-  const absX = Math.abs(movementX);
-  const absY = Math.abs(movementY);
-
-  if (absY > absX && movementY < -0.08) {
-    setStatus("Swipe up detected ↑");
-    onSwipeUp?.();
-    lastGestureTimeRef.current = now;
-  } else if (absY > absX && movementY > 0.08) {
-    setStatus("Swipe down detected ↓");
-    onSwipeDown?.();
-    lastGestureTimeRef.current = now;
-  } else if (absX > absY && movementX > 0.08) {
-    setStatus("Swipe right detected → next date");
-    onSwipeRight?.();
-    lastGestureTimeRef.current = now;
-  } else if (absX > absY && movementX < -0.08) {
-    setStatus("Swipe left detected → previous date");
-    onSwipeLeft?.();
-    lastGestureTimeRef.current = now;
-  } else {
-    setStatus("Hand detected");
-  }
-}
+      // Set anchor on first detection
+      if (anchorXRef.current === null || anchorYRef.current === null) {
+        anchorXRef.current = currentX;
+        anchorYRef.current = currentY;
+        setStatus("Hand detected — move to swipe");
+        return;
       }
 
-      lastXRef.current = currentX;
-      lastYRef.current = currentY;
-    });
+      const movementX = currentX - anchorXRef.current;
+      const movementY = currentY - anchorYRef.current;
+      const now = Date.now();
 
-    const camera = new Camera(videoRef.current, {
-      onFrame: async () => {
-        if (videoRef.current) {
-          await hands.send({ image: videoRef.current });
+      if (now - lastGestureTimeRef.current > GESTURE_COOLDOWN) {
+        const absX = Math.abs(movementX);
+        const absY = Math.abs(movementY);
+
+        if (absY > absX && movementY < -SWIPE_THRESHOLD) {
+          setStatus("Swipe up detected ↑");
+          onSwipeUp?.();
+          lastGestureTimeRef.current = now;
+          anchorXRef.current = currentX;
+          anchorYRef.current = currentY;
+        } else if (absY > absX && movementY > SWIPE_THRESHOLD) {
+          setStatus("Swipe down detected ↓");
+          onSwipeDown?.();
+          lastGestureTimeRef.current = now;
+          anchorXRef.current = currentX;
+          anchorYRef.current = currentY;
+        } else if (absX > absY && movementX > SWIPE_THRESHOLD) {
+          setStatus("Swipe right detected →");
+          onSwipeRight?.();
+          lastGestureTimeRef.current = now;
+          anchorXRef.current = currentX;
+          anchorYRef.current = currentY;
+        } else if (absX > absY && movementX < -SWIPE_THRESHOLD) {
+          setStatus("Swipe left detected ←");
+          onSwipeLeft?.();
+          lastGestureTimeRef.current = now;
+          anchorXRef.current = currentX;
+          anchorYRef.current = currentY;
+        } else {
+          setStatus("Hand detected");
         }
-      },
-      width: 320,
-      height: 240,
+      }
     });
 
-    camera.start();
+    setStatus("Gesture mode on — show your hand");
 
     return () => {
-      camera.stop();
-      hands.close();
+      handsManager.unsubscribe(instanceId.current);
     };
   }, [gestureMode, onSwipeUp, onSwipeDown, onSwipeLeft, onSwipeRight]);
 
@@ -108,19 +105,7 @@ if (now - lastGestureTimeRef.current > 800) {
       <button type="button" onClick={() => setGestureMode(!gestureMode)}>
         {gestureMode ? "Disable Gesture Mode" : "Enable Gesture Mode"}
       </button>
-
       <p>{status}</p>
-
-      {gestureMode && (
-        <video
-          ref={videoRef}
-          style={{
-            width: "160px",
-            borderRadius: "12px",
-            marginTop: "8px",
-          }}
-        />
-      )}
     </div>
   );
 }
