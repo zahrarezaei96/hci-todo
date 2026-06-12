@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { CustomSelect } from './CustomSelect';
 import { useStore } from '../store';
 import { TodoItem } from './TodoItem';
 import { Search, Plus, Menu, SlidersHorizontal, Trash2, Flag, Calendar, Tag, X } from 'lucide-react';
@@ -25,7 +26,9 @@ const VOICE_HINTS: Record<string, string> = {
   'btn-cancel-task': '"cancel"',
   'search-input': '"search"',
   'nav-item': '"go"',
-  'clear-btn': '"clear done"',
+  'clear-btn': '"clear"',
+  'menu-btn': '"sidebar"',
+  'filter-toggle': '"filter"',
   'ob-next': '"next"',
   'ob-back': '"back"',
   'ob-gender-btn': '"male" / "female"',
@@ -53,6 +56,9 @@ export function MainContent() {
   const [newText, setNewText] = useState('');
   const [newPriority, setNewPriority] = useState<Priority>('medium');
   const [newDueDate, setNewDueDate] = useState('');
+  const [newDueDay, setNewDueDay] = useState('');
+  const [newDueMonth, setNewDueMonth] = useState('');
+  const [newDueYear, setNewDueYear] = useState('');
   const [newTags, setNewTags] = useState('');
   const [newNotes, setNewNotes] = useState('');
   const [addExpanded, setAddExpanded] = useState(false);
@@ -86,7 +92,7 @@ export function MainContent() {
       const el = document.elementFromPoint(x, y);
       dot.style.display = prevDisplay;
 
-      const hintEl = el?.closest('.todo-item-wrap, .check-btn, .star-btn, .detail-delete, .add-task-icon, .btn-add-task, .btn-cancel-task, .search-input, .nav-item, .clear-btn, input[type="date"]');
+      const hintEl = el?.closest('.todo-item-wrap, .check-btn, .star-btn, .detail-delete, .add-task-icon, .btn-add-task, .btn-cancel-task, .search-input, .nav-item, .clear-btn, .menu-btn, .filter-toggle, input[type="date"]');
 
       if (hintEl) {
         if (hintEl !== dwellEl) {
@@ -112,20 +118,25 @@ export function MainContent() {
   function addTodo() {
     if (!newText.trim()) return;
     const tags = newTags.split(',').map(t => t.trim().replace(/^#/, '')).filter(Boolean);
+    const builtDate = newDueYear && newDueMonth && newDueDay
+      ? `${newDueYear}-${newDueMonth}-${newDueDay}`
+      : newDueDate || undefined;
     dispatch({
       type: 'ADD_TODO',
       todo: {
         text: newText.trim(), priority: newPriority,
         listId: ['all', 'important', 'planned'].includes(state.activeListId) ? 'personal' : state.activeListId,
-        dueDate: newDueDate || undefined, notes: newNotes, tags,
+        dueDate: builtDate, notes: newNotes, tags,
       },
     });
     setNewText(''); setNewPriority('medium'); setNewDueDate('');
+    setNewDueDay(''); setNewDueMonth(''); setNewDueYear('');
     setNewTags(''); setNewNotes(''); setAddExpanded(false);
   }
 
   function handleCancel() {
     setNewText(''); setNewPriority('medium'); setNewDueDate('');
+    setNewDueDay(''); setNewDueMonth(''); setNewDueYear('');
     setNewTags(''); setNewNotes(''); setAddExpanded(false);
   }
 
@@ -167,7 +178,7 @@ export function MainContent() {
           </button>
           {completed.length > 0 && (
             <button className="clear-btn" onClick={() => dispatch({ type: 'CLEAR_COMPLETED' })}>
-              <Trash2 size={14} /> Clear done
+              <Trash2 size={14} /> Clear
             </button>
           )}
         </div>
@@ -216,16 +227,40 @@ export function MainContent() {
                 ))}
               </div>
             </div>
-            <div className="add-detail-row">
+            <div className="add-detail-row add-detail-row--date">
               <Calendar size={13} className="add-detail-icon" />
               <span className="add-detail-label">Due date</span>
-              <input type="date" className="add-detail-input" value={newDueDate}
-                onChange={e => setNewDueDate(e.target.value)} />
+              <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+                <div style={{ flex: 1 }}>
+                  <CustomSelect
+                    placeholder="Day"
+                    value={newDueDay}
+                    options={Array.from({length:31},(_,i)=>({ value: String(i+1).padStart(2,'0'), label: String(i+1) }))}
+                    onChange={v => setNewDueDay(String(v))}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <CustomSelect
+                    placeholder="Month"
+                    value={newDueMonth}
+                    options={['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m,i)=>({ value: String(i+1).padStart(2,'0'), label: m }))}
+                    onChange={v => setNewDueMonth(String(v))}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <CustomSelect
+                    placeholder="Year"
+                    value={newDueYear}
+                    options={Array.from({length:5},(_,i)=>{ const y=new Date().getFullYear()+i; return { value: String(y), label: String(y) }; })}
+                    onChange={v => setNewDueYear(String(v))}
+                  />
+                </div>
+              </div>
             </div>
             <div className="add-detail-row">
               <Tag size={13} className="add-detail-icon" />
               <span className="add-detail-label">Tags</span>
-              <input className="add-detail-input" placeholder="dev, hci..." value={newTags}
+              <input className="add-detail-input add-tag-input" placeholder="dev, hci..." value={newTags}
                 onChange={e => setNewTags(e.target.value)} />
             </div>
             <div className="add-detail-row add-detail-row--notes">

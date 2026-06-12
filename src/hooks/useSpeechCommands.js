@@ -168,10 +168,35 @@ export function startSpeechRecognition() {
       starBtn?.click();
     }
 
-    // ── ADD ──
-    if (text.includes("add") || text.includes("new task")) {
+    // ── ADD / TITLE ──
+    if (text.includes("add") || text.includes("new task") || text.includes("title")) {
       const addInput = document.querySelector('.add-task-input');
-      addInput?.focus();
+      if (addInput) {
+        addInput.focus();
+        // Close other inputs
+        document.querySelector('.add-tag-input')?.blur();
+        document.querySelector('.add-notes-input')?.blur();
+      }
+    }
+
+    // ── TAG ──
+    if (text === "tag" || text === "tags" || text.includes("add tag")) {
+      const tagInput = document.querySelector('.add-tag-input');
+      if (tagInput) {
+        tagInput.focus();
+        document.querySelector('.add-task-input')?.blur();
+        document.querySelector('.add-notes-input')?.blur();
+      }
+    }
+
+    // ── NOTE ──
+    if (text === "note" || text.includes("add a note") || text.includes("add note")) {
+      const noteInput = document.querySelector('.add-notes-input');
+      if (noteInput) {
+        noteInput.focus();
+        document.querySelector('.add-task-input')?.blur();
+        document.querySelector('.add-tag-input')?.blur();
+      }
     }
 
     // ── CANCEL ──
@@ -185,13 +210,23 @@ export function startSpeechRecognition() {
     }
 
     // ── CLEAR DONE ──
-    if (text.includes("clear done") || text.includes("clear completed")) {
+    if (text === "clear" || text.includes("clear tasks") || text.includes("clear all")) {
       document.querySelector('.clear-btn')?.click();
     }
 
     // ── SEARCH ──
     if (text.includes("search")) {
       (document.querySelector('.search-input'))?.focus();
+    }
+
+    // ── SIDEBAR TOGGLE ──
+    if (text.includes("sidebar") || text.includes("menu") || text.includes("toggle menu")) {
+      document.querySelector('.menu-btn')?.click();
+    }
+
+    // ── FILTER TOGGLE ──
+    if (text.includes("filter") || text.includes("filters")) {
+      document.querySelector('.filter-toggle')?.click();
     }
 
     // ── SIDEBAR NAVIGATION ──

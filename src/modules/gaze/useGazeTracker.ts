@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { handsManager } from './handsManager';
 
 const SMOOTH = 8;
-const DEAD_ZONE = 10;
+const DEAD_ZONE = 4;
 
 export interface GazeTarget {
   id: string;
@@ -98,7 +98,8 @@ export function useGazeTracker(enabled: boolean) {
     let refNoseY = (window as any).__noseRefY ?? 0.4;
     let calibrated = (window as any).__noseCalibrated ?? false;
     const animFrameRef = { current: 0 };
-    const runningRef = { current: false };
+    const runningRef = { current: true };  // true from start — use cancelled flag to abort
+    const cancelledRef = { current: false };
     const landmarkerRef = { current: null as any };
     const handScrollRef = { lastY: null as number | null, lastTime: 0 };
 
@@ -141,7 +142,8 @@ export function useGazeTracker(enabled: boolean) {
         screenX = window.innerWidth / 2 + (refNoseX - noseX) * SCALE * window.innerWidth;
         screenY = window.innerHeight / 2 + (noseY - refNoseY) * SCALE * window.innerHeight;
       } else {
-        screenX = noseX * window.innerWidth;
+        // Mirror X — MediaPipe returns mirrored coords (nose left = high X)
+        screenX = (1 - noseX) * window.innerWidth;
         screenY = noseY * window.innerHeight;
       }
       screenX = Math.max(0, Math.min(window.innerWidth, screenX));
@@ -179,22 +181,24 @@ export function useGazeTracker(enabled: boolean) {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480, facingMode: 'user' }
         });
-        video.srcObject = stream;
-        await video.play();
 
-        // Check video is actually showing
-        if (video.videoWidth === 0 && retryCount < 3) {
-          await new Promise(r => setTimeout(r, 500));
-          stream.getTracks().forEach(t => t.stop());
-          video.srcObject = null;
-          init(retryCount + 1);
-          return;
-        }
+        if (cancelledRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
+
+        video.srcObject = stream;
+
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('video timeout')), 8000);
+          const finish = () => { clearTimeout(timeout); resolve(); };
+          video.onloadeddata = finish;
+          video.onerror = () => { clearTimeout(timeout); reject(new Error('video error')); };
+          video.play().catch(reject);
+        });
+
+        if (cancelledRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
 
         // Also init hand scroll using same stream
         initHandScroll(stream);
 
-        runningRef.current = true;
         detect(0);
       } catch (err) {
         console.error('Init error:', err);
@@ -253,11 +257,12 @@ export function useGazeTracker(enabled: boolean) {
     }
 
     // Wait for Onboarding to fully release the camera before grabbing it
-    const initTimer = setTimeout(() => { init(); }, 1500);
+    const initTimer = setTimeout(() => { init(); }, 300);
 
     return () => {
       clearTimeout(initTimer);
       runningRef.current = false;
+      cancelledRef.current = true;
       cancelAnimationFrame(animFrameRef.current);
       handsManager.unsubscribe('gazeTracker');
       handsManager.setVideo(null);

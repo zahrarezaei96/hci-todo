@@ -36,7 +36,7 @@ function AppInner({ profile, setProfile }: { profile: Profile; setProfile: (p: P
   );
 }
 
-export function App() {
+function AppContent() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -59,10 +59,17 @@ export function App() {
   if (!profile) return <Onboarding onComplete={handleOnboarding} />;
 
   return (
+    <ExpandedTodoProvider>
+      <AppInner profile={profile} setProfile={setProfile} />
+    </ExpandedTodoProvider>
+  );
+}
+
+// GazeProvider wraps everything so useGazeTracker runs during Onboarding too
+export function App() {
+  return (
     <GazeProvider>
-      <ExpandedTodoProvider>
-        <AppInner profile={profile} setProfile={setProfile} />
-      </ExpandedTodoProvider>
+      <AppContent />
     </GazeProvider>
   );
 }

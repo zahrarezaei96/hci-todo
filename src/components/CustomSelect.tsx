@@ -17,6 +17,7 @@ interface Props {
 export function CustomSelect({ options, value, onChange, placeholder = 'Select...', id }: Props) {
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState<string | number | null>(null);
+  const [openUpward, setOpenUpward] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -78,7 +79,15 @@ export function CustomSelect({ options, value, onChange, placeholder = 'Select..
       {/* Trigger */}
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => {
+          if (!open && containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom;
+            const spaceAbove = rect.top;
+            setOpenUpward(spaceBelow < 220 && spaceAbove > spaceBelow);
+          }
+          setOpen(o => !o);
+        }}
         style={{
           width: '100%',
           padding: '10px 12px',
@@ -104,17 +113,18 @@ export function CustomSelect({ options, value, onChange, placeholder = 'Select..
           ref={listRef}
           style={{
             position: 'absolute',
-            bottom: '100%',
+            ...(openUpward
+              ? { bottom: '100%', marginBottom: 4, boxShadow: '0 -4px 16px rgba(0,0,0,0.12)' }
+              : { top: '100%', marginTop: 4, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }
+            ),
             left: 0,
             right: 0,
             background: 'white',
             border: '1.5px solid #0078d4',
             borderRadius: 8,
-            maxHeight: 200,
+            maxHeight: 150,
             overflowY: 'auto',
             zIndex: 99999,
-            boxShadow: '0 -4px 16px rgba(0,0,0,0.12)',
-            marginBottom: 4,
           }}
         >
           {options.map(opt => (
