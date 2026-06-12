@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store';
 import { TodoItem } from './TodoItem';
-import { Search, Plus, Menu, SlidersHorizontal, Trash2, Flag, Calendar, Tag, X, Eye, EyeOff, Mic, MicOff } from 'lucide-react';
+import { Search, Plus, Menu, SlidersHorizontal, Trash2, Flag, Calendar, Tag, X } from 'lucide-react';
 import { Priority } from '../types';
-import { startSpeechRecognition } from '../hooks/useSpeechCommands';
 import { useGaze } from '../modules/gaze/GazeContext';
 import { useExpanded } from '../context/ExpandedTodoContext';
 
@@ -48,7 +47,7 @@ function getVoiceHint(el: Element | null): string | null {
 
 export function MainContent() {
   const { state, dispatch, getFilteredTodos } = useStore();
-  const { enabled, toggleGaze } = useGaze();
+  const { enabled } = useGaze();
   const { expandedId, toggleExpanded } = useExpanded();
 
   const [newText, setNewText] = useState('');
@@ -58,7 +57,6 @@ export function MainContent() {
   const [newNotes, setNewNotes] = useState('');
   const [addExpanded, setAddExpanded] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [voiceOn, setVoiceOn] = useState(() => (window as any).__voiceWasEnabled === true);
   
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const handVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -159,25 +157,9 @@ export function MainContent() {
           </div>
         </div>
         <div className="main-header-right">
-          {/* Hand/Nose toggle */}
-          <button className={`gaze-toggle ${enabled ? 'gaze-toggle--active' : ''}`} onClick={toggleGaze}
-            title={enabled ? 'Disable Hand/Nose' : 'Enable Hand/Nose'}>
-            {enabled ? <Eye size={16} /> : <EyeOff size={16} />}
-            <span>{enabled ? 'Hand/Nose On' : 'Hand/Nose Off'}</span>
-          </button>
 
-          {/* Voice toggle */}
-          <button className={`gaze-toggle ${voiceOn ? 'gaze-toggle--active' : ''}`}
-            onClick={() => setVoiceOn(v => {
-            const next = !v;
-            (window as any).__voiceWasEnabled = next;
-            if (next) startSpeechRecognition();
-            return next;
-          })}
-            title={voiceOn ? 'Voice On' : 'Voice Off'}>
-            {voiceOn ? <Mic size={16} /> : <MicOff size={16} />}
-            <span>{voiceOn ? 'Voice On' : 'Voice Off'}</span>
-          </button>
+
+
 
           <button className={`filter-toggle ${showFilters ? 'filter-toggle--active' : ''}`}
             onClick={() => setShowFilters(!showFilters)}>

@@ -3,7 +3,6 @@ import { useGazeTracker } from './useGazeTracker';
 
 interface GazeContextType {
   enabled: boolean;
-  toggleGaze: () => void;
   registerTarget: (id: string, action: () => void) => () => void;
   getProgress: (id: string) => number;
 }
@@ -11,20 +10,19 @@ interface GazeContextType {
 const GazeContext = createContext<GazeContextType | null>(null);
 
 export function GazeProvider({ children }: { children: ReactNode }) {
-  const [enabled, setEnabled] = useState(false);
   const [progressMap, setProgressMap] = useState<Record<string, number>>({});
 
-  const { registerTarget, setProgressCallback } = useGazeTracker(enabled);
+  // Always enabled — no toggle
+  const { registerTarget, setProgressCallback } = useGazeTracker(true);
 
-  setProgressCallback((id, progress) => {
+  setProgressCallback((id: string, progress: number) => {
     setProgressMap(prev => ({ ...prev, [id]: progress }));
   });
 
-  const toggleGaze = useCallback(() => setEnabled(e => !e), []);
   const getProgress = useCallback((id: string) => progressMap[id] ?? 0, [progressMap]);
 
   return (
-    <GazeContext.Provider value={{ enabled, toggleGaze, registerTarget, getProgress }}>
+    <GazeContext.Provider value={{ enabled: true, registerTarget, getProgress }}>
       {children}
     </GazeContext.Provider>
   );

@@ -80,7 +80,7 @@ async function startFeed(video: HTMLVideoElement) {
     }
 
     if (feedRunning && currentVideo === video) {
-      feedLoopId = setTimeout(tick, 33);
+      feedLoopId = setTimeout(tick, 66); // ~15fps
     }
   };
 

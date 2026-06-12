@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { CustomSelect } from './CustomSelect';
-import { ChevronRight, ChevronLeft, Check, Eye, EyeOff, Mic, MicOff } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Check } from 'lucide-react';
 import { startSpeechRecognition } from '../hooks/useSpeechCommands';
 import { handsManager } from '../modules/gaze/handsManager';
 
@@ -26,8 +26,6 @@ export function Onboarding({ onComplete }: Props) {
   const [gender, setGender] = useState<'male' | 'female' | null>(null);
   const [birthday, setBirthday] = useState('');
   const [avatar, setAvatar] = useState('');
-  const [noseOn, setNoseOn] = useState(false);
-  const [voiceOn, setVoiceOn] = useState(false);
   const [calibrated, setCalibrated] = useState(false);
   const [calibHint, setCalibHint] = useState('');
 
@@ -202,32 +200,27 @@ export function Onboarding({ onComplete }: Props) {
       try { container.remove(); } catch(_) {}
       containerRef.current = null; videoRef.current = null; landRef.current = null;
       xBuf.current = []; yBuf.current = [];
+      // Stop all tracks and explicitly nullify srcObject so the browser
+      // fully releases the camera before useGazeTracker tries to grab it
       try {
-        streamRef.current?.getTracks().forEach(t => t.stop());
+        const vid = videoRef.current as HTMLVideoElement | null;
+        if (vid) { vid.pause(); vid.srcObject = null; }
+        streamRef.current?.getTracks().forEach(t => { t.stop(); });
         streamRef.current = null;
       } catch(_) {}
     };
   }, []); // Only init ONCE
 
-  // Separate effect just for pause/resume
+  // Always show calibration hint on mount
   useEffect(() => {
-    if (!noseOn) {
-      const dot = document.getElementById('gaze-cursor-dot');
-      if (dot) dot.style.display = 'none';
-    }
-    // Show/hide calibration hint
-    if (noseOn && !calibrated) {
-      setCalibHint('👃 Press Space to calibrate');
-    } else if (!noseOn) {
-      setCalibHint('');
-    }
-  }, [noseOn]);
+    if (!calibrated) setCalibHint('👃 Press Space to calibrate');
+  }, []);
 
-  // ── Voice ──
+  // ── Voice — always on ──
   useEffect(() => {
-    (window as any).__voiceWasEnabled = voiceOn;
-    if (voiceOn) startSpeechRecognition();
-  }, [voiceOn]);
+    (window as any).__voiceWasEnabled = true;
+    startSpeechRecognition();
+  }, []);
 
   function canNext() {
     if (step === 0) return name.trim().length >= 2;
@@ -238,31 +231,19 @@ export function Onboarding({ onComplete }: Props) {
 
   function finish() {
     if (!gender || !avatar) return;
-    (window as any).__noseWasEnabled = noseOn;
-    (window as any).__voiceWasEnabled = voiceOn;
+    (window as any).__noseWasEnabled = true;
+    (window as any).__voiceWasEnabled = true;
     onComplete({ name: name.trim(), gender, birthday, avatar });
   }
 
   return (
     <div className="ob-overlay">
-      {/* Toggle buttons — outside card, top right of screen */}
-      <div style={{ position: 'fixed', top: 16, right: 16, display: 'flex', gap: 8, zIndex: 100001 }}>
-        <button className={`gaze-toggle ${noseOn ? 'gaze-toggle--active' : ''}`}
-          onClick={() => setNoseOn(n => !n)}>
-          {noseOn ? <Eye size={16} /> : <EyeOff size={16} />}
-          <span style={{ marginLeft: 4 }}>{noseOn ? 'Nose On' : 'Nose Off'}</span>
-        </button>
-        <button className={`gaze-toggle ${voiceOn ? 'gaze-toggle--active' : ''}`}
-          onClick={() => setVoiceOn(v => !v)}>
-          {voiceOn ? <Mic size={16} /> : <MicOff size={16} />}
-          <span style={{ marginLeft: 4 }}>{voiceOn ? 'Voice On' : 'Voice Off'}</span>
-        </button>
-      </div>
+
 
       <div className="ob-card" style={{ position: 'relative', overflowY: 'auto', maxHeight: '90vh', width: '460px' }}>
 
         {/* Calibration hint */}
-        {noseOn && calibHint && (
+        {calibHint && (
           <div style={{
             position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
             background: calibrated ? 'rgba(74,222,128,0.9)' : 'rgba(0,120,212,0.9)',

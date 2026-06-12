@@ -195,11 +195,11 @@ export function useGazeTracker(enabled: boolean) {
         initHandScroll(stream);
 
         runningRef.current = true;
-        detect();
+        detect(0);
       } catch (err) {
         console.error('Init error:', err);
         if (retryCount < 3) {
-          setTimeout(() => init(retryCount + 1), 1000);
+          setTimeout(() => init(retryCount + 1), 1500);
         }
       }
     }
@@ -236,10 +236,14 @@ export function useGazeTracker(enabled: boolean) {
       handsManager.setVideo(video);
     }
 
-    function detect() {
+    let lastDetectTime = 0;
+    const DETECT_INTERVAL = 66; // ~15fps — enough for nose cursor, frees CPU for speech
+
+    function detect(now: number) {
       if (!runningRef.current || !landmarkerRef.current) return;
-      if (video.readyState >= 2) {
-        const results = landmarkerRef.current.detectForVideo(video, performance.now());
+      if (now - lastDetectTime >= DETECT_INTERVAL && video.readyState >= 2) {
+        lastDetectTime = now;
+        const results = landmarkerRef.current.detectForVideo(video, now);
         if (results?.faceLandmarks?.[0]) {
           const nose = results.faceLandmarks[0][4];
           if (nose) processNose(nose.x, nose.y);
@@ -248,8 +252,8 @@ export function useGazeTracker(enabled: boolean) {
       animFrameRef.current = requestAnimationFrame(detect);
     }
 
-    // Delay to ensure webcam is released before reinitializing
-    const initTimer = setTimeout(() => { init(); }, 800);
+    // Wait for Onboarding to fully release the camera before grabbing it
+    const initTimer = setTimeout(() => { init(); }, 1500);
 
     return () => {
       clearTimeout(initTimer);
