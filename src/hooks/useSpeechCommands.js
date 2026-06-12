@@ -1,113 +1,228 @@
-let hoveredElement = null;
-
-document.addEventListener('mouseover', (event) => {
-  hoveredElement = event.target;
-});
-
 let recognition;
 let hasStarted = false;
+let toggleExpandedFn = null;
+
+export function setToggleExpanded(fn) {
+  toggleExpandedFn = fn;
+}
+
+// Voice display element
+function showVoiceText(text) {
+  let display = document.getElementById('voice-display');
+  if (!display) {
+    display = document.createElement('div');
+    display.id = 'voice-display';
+    display.style.cssText = `
+      position: fixed; bottom: 24px; right: 24px;
+      background: rgba(0,0,0,0.75); color: white;
+      padding: 6px 14px; border-radius: 20px;
+      font-size: 13px; font-family: sans-serif;
+      z-index: 999997; pointer-events: none;
+      transition: opacity 0.3s;
+      white-space: nowrap;
+    `;
+    document.body.appendChild(display);
+  }
+  display.textContent = `🎤 "${text}"`;
+  display.style.opacity = '1';
+  clearTimeout(display._timeout);
+  display._timeout = setTimeout(() => { display.style.opacity = '0'; }, 2500);
+}
+
+// Get element at nose cursor with tolerance
+function getElementAtNoseCursor() {
+  const dot = document.getElementById('gaze-cursor-dot');
+  if (!dot) return null;
+  const x = parseFloat(dot.style.left);
+  const y = parseFloat(dot.style.top);
+  if (!x || !y) return null;
+
+  // Try exact point first
+  dot.style.display = 'none';
+  let el = document.elementFromPoint(x, y);
+  dot.style.display = 'block';
+
+  // If no meaningful element, try nearby points (tolerance)
+  if (!el || el === document.body || el === document.documentElement) {
+    const offsets = [[0,0],[10,0],[-10,0],[0,10],[0,-10],[15,0],[-15,0],[0,15],[0,-15]];
+    dot.style.display = 'none';
+    for (const [dx, dy] of offsets) {
+      const candidate = document.elementFromPoint(x + dx, y + dy);
+      if (candidate && candidate !== document.body && candidate !== document.documentElement) {
+        el = candidate;
+        break;
+      }
+    }
+    dot.style.display = 'block';
+  }
+  return el;
+}
 
 export function startSpeechRecognition() {
-
-  const SpeechRecognition =
-    window.SpeechRecognition || window.webkitSpeechRecognition;
-
-  if (!SpeechRecognition) {
-    console.log("Speech recognition not supported");
-    return;
-  }
-
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { console.log("Speech recognition not supported"); return; }
   if (hasStarted) return;
 
   recognition = new SpeechRecognition();
-
   recognition.lang = "en-US";
   recognition.continuous = true;
-  recognition.interimResults = true;
+  recognition.interimResults = false;
 
-  recognition.onstart = () => {
-    hasStarted = true;
-    console.log("Speech recognition started");
-  };
+  recognition.onstart = () => { hasStarted = true; };
 
   recognition.onresult = (event) => {
+    const result = event.results[event.results.length - 1];
+    if (!result.isFinal) return;
+    const text = result[0].transcript.toLowerCase().trim();
+    showVoiceText(text);
 
-    const text = event.results[event.results.length - 1][0].transcript
-      .toLowerCase()
-      .trim();
+    console.log("Voice command:", text);
+    const target = getElementAtNoseCursor();
 
-    console.log("Heard:", text);
+    // ── CLICK / SELECT ──
+    if (text.includes("click") || text.includes("select")) {
+      target?.click();
+    }
 
-    if (event.results[event.results.length - 1].isFinal) {
+    // ── NEXT (onboarding) ──
+    if (text.includes("next")) {
+      const nextBtn = document.querySelector('.ob-next:not(.ob-next--disabled)');
+      nextBtn?.click();
+    }
 
-      console.log("Final command:", text);
+    // ── BACK (onboarding) ──
+    if (text.includes("back")) {
+      document.querySelector('.ob-back')?.click();
+    }
 
-      // ADD
+    // ── MALE / FEMALE (onboarding) ──
+    if (text.includes("male") && !text.includes("female")) {
+      const maleBtns = document.querySelectorAll('.ob-gender-btn');
+      maleBtns[0]?.click();
+    }
+    if (text.includes("female")) {
+      const femaleBtns = document.querySelectorAll('.ob-gender-btn');
+      femaleBtns[1]?.click();
+    }
 
-      if (text.includes("add") || text.includes("ad")) {
+    // ── WRITE / TYPE / FOCUS (onboarding name input) ──
+    if (text.includes("write") || text.includes("type") || text.includes("name")) {
+      const obInput = document.querySelector('.ob-input');
+      obInput?.focus();
+    }
 
-        console.log("ADD COMMAND DETECTED");
+    // ── LET'S GO / FINISH (onboarding) ──
+    if (text.includes("let's go") || text.includes("lets go") || text.includes("finish")) {
+      const nextBtn = document.querySelector('.ob-next:not(.ob-next--disabled)');
+      nextBtn?.click();
+    }
 
-        const addInput = document.querySelectorAll('input')[1];
-
-        if (addInput) {
-          addInput.focus();
+    // ── OPEN / EXPAND / CLOSE ──
+    if (text.includes("open") || text.includes("expand") || text.includes("close")) {
+      // Check if target is a CustomSelect trigger
+      const customSelect = target?.closest('[data-custom-select]');
+      if (customSelect) {
+        const trigger = customSelect.querySelector('button');
+        trigger?.click();
+      } else {
+        // Toggle todo item
+        const todoWrap = target?.closest('.todo-item-wrap');
+        if (todoWrap) {
+          const todoId = todoWrap.getAttribute('data-todo-id');
+          if (todoId && toggleExpandedFn) {
+            toggleExpandedFn(todoId);
+          } else {
+            todoWrap.click();
+          }
         }
       }
+    }
 
-      // CLICK
-
-      if (text.includes("click")) {
-
-        console.log("CLICK COMMAND DETECTED");
-
-        if (hoveredElement) {
-          hoveredElement.click();
-        }
+    // ── CHOOSE / SELECT OPTION ── (when inside custom dropdown)
+    if (text.includes("choose") || text.includes("pick") || text.includes("select")) {
+      // If cursor is on a custom select option, click it
+      const option = target?.closest('[data-select-option]');
+      if (option) {
+        option.click();
+      } else {
+        // generic click
+        target?.click();
       }
+    }
 
-      // CHECK
+    // ── CHECK / COMPLETE ──
+    if (text.includes("check") || text.includes("complete") || text.includes("done")) {
+      const checkBtn = target?.closest('.todo-item-wrap')?.querySelector('.check-btn');
+      checkBtn?.click();
+    }
 
-      if (text.includes("check")) {
+    // ── DELETE ──
+    if (text.includes("delete") || text.includes("remove")) {
+      const deleteBtn = target?.closest('.todo-item-wrap')?.querySelector('.detail-delete');
+      deleteBtn?.click();
+    }
 
-        console.log("CHECK COMMAND DETECTED");
+    // ── STAR ──
+    if (text.includes("star") || text.includes("important")) {
+      const starBtn = target?.closest('.todo-item-wrap')?.querySelector('.star-btn');
+      starBtn?.click();
+    }
 
-        if (hoveredElement) {
-          hoveredElement.click();
-        }
-      }
+    // ── ADD ──
+    if (text.includes("add") || text.includes("new task")) {
+      const addInput = document.querySelector('.add-task-input');
+      addInput?.focus();
+    }
 
-      // OPEN
+    // ── CANCEL ──
+    if (text.includes("cancel")) {
+      document.querySelector('.btn-cancel-task')?.click();
+    }
 
-      if (text.includes("open")) {
+    // ── CONFIRM / SAVE ──
+    if (text.includes("confirm") || text.includes("save") || text.includes("submit")) {
+      document.querySelector('.btn-add-task')?.click();
+    }
 
-        console.log("OPEN COMMAND DETECTED");
+    // ── CLEAR DONE ──
+    if (text.includes("clear done") || text.includes("clear completed")) {
+      document.querySelector('.clear-btn')?.click();
+    }
 
-        if (hoveredElement) {
-          hoveredElement.click();
-        }
-      }
+    // ── SEARCH ──
+    if (text.includes("search")) {
+      (document.querySelector('.search-input'))?.focus();
+    }
 
-      // DELETE
-
-      if (text.includes("delete")) {
-
-        console.log("DELETE COMMAND DETECTED");
-
-        if (hoveredElement) {
-          hoveredElement.click();
-        }
-      }
+    // ── SIDEBAR NAVIGATION ──
+    if (text.includes("my day") || text.includes("today")) {
+      document.querySelector('[data-list-id="myday"]')?.click();
+    }
+    if (text.includes("planned")) {
+      document.querySelector('[data-list-id="planned"]')?.click();
+    }
+    if (text.includes("all tasks")) {
+      document.querySelector('[data-list-id="all"]')?.click();
+    }
+    if (text.includes("personal")) {
+      document.querySelector('[data-list-id="personal"]')?.click();
+    }
+    if (text.includes("work")) {
+      document.querySelector('[data-list-id="work"]')?.click();
+    }
+    if (text.includes("go") || text.includes("navigate")) {
+      target?.closest('.nav-item')?.click();
     }
   };
 
   recognition.onerror = (event) => {
+    if (event.error === 'no-speech') return;
     console.log("Speech error:", event.error);
   };
 
   recognition.onend = () => {
     hasStarted = false;
-    console.log("Speech recognition ended");
+    setTimeout(() => startSpeechRecognition(), 500);
   };
 
   recognition.start();

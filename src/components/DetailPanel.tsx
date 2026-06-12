@@ -11,6 +11,12 @@ const priorityOptions: { value: Priority; label: string; color: string }[] = [
   { value: 'urgent', label: 'Urgent', color: '#ef4444' },
 ];
 
+function shiftDate(base: string | undefined, days: number): string {
+  const d = new Date((base || new Date().toISOString().split('T')[0]) + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
 export function DetailPanel() {
   const { state, dispatch } = useStore();
   const todo = state.todos.find(t => t.id === state.selectedTodoId);
@@ -40,6 +46,18 @@ export function DetailPanel() {
     setNewTag('');
   }
 
+  function updateDate(days: number) {
+    dispatch({ type: 'UPDATE_TODO', id: todo!.id, updates: { dueDate: shiftDate(todo!.dueDate, days) } });
+  }
+
+  function updateReminder(days: number) {
+    const base = todo!.reminderDate ? todo!.reminderDate.split('T')[0] : new Date().toISOString().split('T')[0];
+    const d = new Date(base + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    const newReminder = d.toISOString().split('T')[0] + 'T' + (todo!.reminderDate?.split('T')[1] || '09:00');
+    dispatch({ type: 'UPDATE_TODO', id: todo!.id, updates: { reminderDate: newReminder } });
+  }
+
   const completedSteps = todo.steps.filter(s => s.completed).length;
 
   return (
@@ -58,24 +76,19 @@ export function DetailPanel() {
         </button>
 
         {editingText ? (
-          <input
-            className="detail-title-input"
-            value={textVal}
+          <input className="detail-title-input" value={textVal}
             onChange={e => setTextVal(e.target.value)}
             onBlur={saveEdit}
             onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditingText(false); }}
-            autoFocus
-          />
+            autoFocus />
         ) : (
           <h2 className={`detail-title ${todo.completed ? 'detail-title--done' : ''}`} onClick={startEdit}>
             {todo.text}
           </h2>
         )}
 
-        <button
-          className={`star-btn ${todo.starred ? 'star-btn--active' : ''}`}
-          onClick={() => dispatch({ type: 'TOGGLE_STAR', id: todo.id })}
-        >
+        <button className={`star-btn ${todo.starred ? 'star-btn--active' : ''}`}
+          onClick={() => dispatch({ type: 'TOGGLE_STAR', id: todo.id })}>
           <Star size={18} fill={todo.starred ? 'currentColor' : 'none'} />
         </button>
 
@@ -88,18 +101,14 @@ export function DetailPanel() {
         {/* Steps */}
         <div className="detail-section">
           <div className="detail-section-header">
-            <ChevronRight size={14} />
-            <span>Steps</span>
+            <ChevronRight size={14} /><span>Steps</span>
             {todo.steps.length > 0 && <span className="step-count">{completedSteps}/{todo.steps.length}</span>}
           </div>
-
           <div className="steps-list">
             {todo.steps.map(step => (
               <div key={step.id} className={`step-item ${step.completed ? 'step-item--done' : ''}`}>
-                <button
-                  className={`step-check ${step.completed ? 'step-check--checked' : ''}`}
-                  onClick={() => dispatch({ type: 'TOGGLE_STEP', todoId: todo.id, stepId: step.id })}
-                />
+                <button className={`step-check ${step.completed ? 'step-check--checked' : ''}`}
+                  onClick={() => dispatch({ type: 'TOGGLE_STEP', todoId: todo.id, stepId: step.id })} />
                 <span className="step-text">{step.text}</span>
                 <button className="step-delete" onClick={() => dispatch({ type: 'DELETE_STEP', todoId: todo.id, stepId: step.id })}>
                   <X size={11} />
@@ -107,91 +116,60 @@ export function DetailPanel() {
               </div>
             ))}
           </div>
-
           <div className="add-step">
             <Plus size={14} />
-            <input
-              className="add-step-input"
-              placeholder="Add a step..."
-              value={newStep}
+            <input className="add-step-input" placeholder="Add a step..." value={newStep}
               onChange={e => setNewStep(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') addStep(); }}
-            />
+              onKeyDown={e => { if (e.key === 'Enter') addStep(); }} />
           </div>
         </div>
 
         {/* Due Date */}
         <div className="detail-section">
-          <div className="detail-section-header">
-            <Calendar size={14} />
-            <span>Due Date</span>
-          </div>
-          <input
-  type="date"
-  className="detail-input"
-  value={todo.dueDate || ''}
-  onChange={e =>
-    dispatch({
-      type: 'UPDATE_TODO',
-      id: todo.id,
-      updates: { dueDate: e.target.value || undefined }
-    })
-  }
-/>
-
-<GestureDateControl
-  onSwipeRight={() => console.log("Swipe right")}
-  onSwipeLeft={() => console.log("Swipe left")}
-  onSwipeUp={() => console.log("Swipe up")}
-  onSwipeDown={() => console.log("Swipe down")}
-/>
+          <div className="detail-section-header"><Calendar size={14} /><span>Due Date</span></div>
+          <input type="date" className="detail-input" value={todo.dueDate || ''}
+            onChange={e => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { dueDate: e.target.value || undefined } })} />
+          <GestureDateControl
+            onSwipeRight={() => updateDate(1)}
+            onSwipeLeft={() => updateDate(-1)}
+            onSwipeUp={() => updateDate(-7)}
+            onSwipeDown={() => updateDate(7)}
+          />
         </div>
 
         {/* Reminder */}
         <div className="detail-section">
-          <div className="detail-section-header">
-            <Calendar size={14} />
-            <span>Reminder</span>
-          </div>
-          <input
-            type="datetime-local"
-            className="detail-input"
-            value={todo.reminderDate || ''}
-            onChange={e => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { reminderDate: e.target.value || undefined } })}
+          <div className="detail-section-header"><Calendar size={14} /><span>Reminder</span></div>
+          <input type="datetime-local" className="detail-input" value={todo.reminderDate || ''}
+            onChange={e => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { reminderDate: e.target.value || undefined } })} />
+          <GestureDateControl
+            onSwipeRight={() => updateReminder(1)}
+            onSwipeLeft={() => updateReminder(-1)}
+            onSwipeUp={() => updateReminder(-7)}
+            onSwipeDown={() => updateReminder(7)}
           />
         </div>
 
         {/* Priority */}
         <div className="detail-section">
-          <div className="detail-section-header">
-            <Flag size={14} />
-            <span>Priority</span>
-          </div>
+          <div className="detail-section-header"><Flag size={14} /><span>Priority</span></div>
           <div className="priority-options">
             {priorityOptions.map(opt => (
-              <button
-                key={opt.value}
+              <button key={opt.value}
                 className={`priority-opt ${todo.priority === opt.value ? 'priority-opt--active' : ''}`}
                 style={{ '--p': opt.color } as React.CSSProperties}
-                onClick={() => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { priority: opt.value } })}
-              >
+                onClick={() => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { priority: opt.value } })}>
                 {opt.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Move to list */}
+        {/* List */}
         <div className="detail-section">
-          <div className="detail-section-header">
-            <Flag size={14} />
-            <span>List</span>
-          </div>
-          <select
-            className="detail-select"
-            value={todo.listId}
-            onChange={e => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { listId: e.target.value } })}
-          >
+          <div className="detail-section-header"><Flag size={14} /><span>List</span></div>
+          <select className="detail-select" value={todo.listId}
+            onChange={e => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { listId: e.target.value } })}>
             {state.lists.filter(l => !l.isSystem).map(l => (
               <option key={l.id} value={l.id}>{l.name}</option>
             ))}
@@ -200,10 +178,7 @@ export function DetailPanel() {
 
         {/* Tags */}
         <div className="detail-section">
-          <div className="detail-section-header">
-            <Tag size={14} />
-            <span>Tags</span>
-          </div>
+          <div className="detail-section-header"><Tag size={14} /><span>Tags</span></div>
           <div className="tags-list">
             {todo.tags.map(tag => (
               <span key={tag} className="detail-tag">
@@ -215,28 +190,17 @@ export function DetailPanel() {
             ))}
           </div>
           <div className="add-tag">
-            <input
-              className="add-tag-input"
-              placeholder="Add tag..."
-              value={newTag}
+            <input className="add-tag-input" placeholder="Add tag..." value={newTag}
               onChange={e => setNewTag(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') addTag(); }}
-            />
+              onKeyDown={e => { if (e.key === 'Enter') addTag(); }} />
           </div>
         </div>
 
         {/* Notes */}
         <div className="detail-section detail-section--grow">
-          <div className="detail-section-header">
-            <StickyNote size={14} />
-            <span>Notes</span>
-          </div>
-          <textarea
-            className="notes-input"
-            placeholder="Add a note..."
-            value={todo.notes}
-            onChange={e => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { notes: e.target.value } })}
-          />
+          <div className="detail-section-header"><StickyNote size={14} /><span>Notes</span></div>
+          <textarea className="notes-input" placeholder="Add a note..." value={todo.notes}
+            onChange={e => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { notes: e.target.value } })} />
         </div>
       </div>
 
@@ -244,12 +208,9 @@ export function DetailPanel() {
         <span className="detail-created">
           Created {new Date(todo.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </span>
-        <button
-          className="detail-delete"
-          onClick={() => { dispatch({ type: 'DELETE_TODO', id: todo.id }); dispatch({ type: 'SELECT_TODO', id: null }); }}
-        >
-          <Trash2 size={14} />
-          Delete task
+        <button className="detail-delete"
+          onClick={() => { dispatch({ type: 'DELETE_TODO', id: todo.id }); dispatch({ type: 'SELECT_TODO', id: null }); }}>
+          <Trash2 size={14} /> Delete task
         </button>
       </div>
     </aside>

@@ -31,7 +31,6 @@ export function Sidebar({ profile, onProfileChange }: Props) {
     setEditingProfile(false);
   }
 
-  // compute age
   const age = profile.birthday
     ? Math.floor((Date.now() - new Date(profile.birthday).getTime()) / (365.25 * 24 * 3600 * 1000))
     : null;
@@ -42,14 +41,11 @@ export function Sidebar({ profile, onProfileChange }: Props) {
         <div className="sb-avatar">{profile.avatar}</div>
         <div className="user-info">
           {editingProfile ? (
-            <input
-              className="user-name-input"
-              value={editName}
+            <input className="user-name-input" value={editName}
               onChange={e => setEditName(e.target.value)}
               onBlur={saveProfileName}
               onKeyDown={e => { if (e.key === 'Enter') saveProfileName(); if (e.key === 'Escape') setEditingProfile(false); }}
-              autoFocus
-            />
+              autoFocus />
           ) : (
             <span className="user-name" onClick={() => { setEditName(profile.name); setEditingProfile(true); }}>
               {profile.name}
@@ -70,6 +66,7 @@ export function Sidebar({ profile, onProfileChange }: Props) {
             return (
               <button
                 key={list.id}
+                data-list-id={list.id}
                 className={`nav-item ${state.activeListId === list.id ? 'nav-item--active' : ''}`}
                 onClick={() => dispatch({ type: 'SET_ACTIVE_LIST', listId: list.id })}
                 style={{ '--accent': list.color } as React.CSSProperties}
@@ -90,6 +87,7 @@ export function Sidebar({ profile, onProfileChange }: Props) {
               return (
                 <button
                   key={list.id}
+                  data-list-id={list.id}
                   className={`nav-item ${state.activeListId === list.id ? 'nav-item--active' : ''}`}
                   onClick={() => dispatch({ type: 'SET_ACTIVE_LIST', listId: list.id })}
                   style={{ '--accent': list.color } as React.CSSProperties}

@@ -4,8 +4,8 @@ import { Sidebar } from './Sidebar';
 import { MainContent } from './MainContent';
 import { Onboarding } from './Onboarding';
 import { GazeProvider } from '../modules/gaze/GazeContext';
-import { startSpeechRecognition } from '../hooks/useSpeechCommands'; 
-
+import { ExpandedTodoProvider, useExpanded } from '../context/ExpandedTodoContext';
+import { startSpeechRecognition, setToggleExpanded } from '../hooks/useSpeechCommands';
 
 interface Profile {
   name: string;
@@ -14,8 +14,29 @@ interface Profile {
   avatar: string;
 }
 
-export function App() {
+function AppInner({ profile, setProfile }: { profile: Profile; setProfile: (p: Profile) => void }) {
   const { state } = useStore();
+  const { toggleExpanded } = useExpanded();
+
+  useEffect(() => {
+    setToggleExpanded(toggleExpanded);
+  }, [toggleExpanded]);
+
+  return (
+    <div className={`app-layout ${!state.sidebarOpen ? 'app-layout--collapsed' : ''}`}>
+      <Sidebar
+        profile={profile}
+        onProfileChange={p => {
+          localStorage.setItem('focus-profile', JSON.stringify(p));
+          setProfile(p);
+        }}
+      />
+      <MainContent />
+    </div>
+  );
+}
+
+export function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -39,23 +60,9 @@ export function App() {
 
   return (
     <GazeProvider>
-      <div className={`app-layout ${!state.sidebarOpen ? 'app-layout--collapsed' : ''}`}>
-        <Sidebar
-          profile={profile}
-          onProfileChange={p => {
-            localStorage.setItem('focus-profile', JSON.stringify(p));
-            setProfile(p);
-          }}
-        />
-        <MainContent />
-      </div>
+      <ExpandedTodoProvider>
+        <AppInner profile={profile} setProfile={setProfile} />
+      </ExpandedTodoProvider>
     </GazeProvider>
   );
-  <div className={`app-layout ${!state.sidebarOpen ? 'app-layout--collapsed' : ''}`}>
-    <Sidebar profile={profile} onProfileChange={p => { localStorage.setItem('focus-profile', JSON.stringify(p)); setProfile(p); }} />
-
-
-    <MainContent />
-  </div>
-);
 }

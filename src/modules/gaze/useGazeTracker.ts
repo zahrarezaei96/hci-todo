@@ -1,6 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
 
-const DWELL_TIME = 2500;
 const SMOOTH = 8;
 const DEAD_ZONE = 10;
 
@@ -9,29 +8,15 @@ export interface GazeTarget {
   action: () => void;
 }
 
-interface DwellState {
-  id: string;
-  startTime: number;
-  timer: ReturnType<typeof setTimeout> | null;
-}
-
 export function useGazeTracker(enabled: boolean) {
   const targetsRef = useRef<Map<string, GazeTarget>>(new Map());
-  const dwellRef = useRef<DwellState | null>(null);
-  const progressCallbackRef = useRef<((id: string, progress: number) => void) | null>(null);
-  const animFrameRef = useRef<number | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const landmarkerRef = useRef<any>(null);
-  const runningRef = useRef(false);
 
   const registerTarget = useCallback((id: string, action: () => void) => {
     targetsRef.current.set(id, { id, action });
     return () => targetsRef.current.delete(id);
   }, []);
 
-  const setProgressCallback = useCallback((cb: (id: string, progress: number) => void) => {
-    progressCallbackRef.current = cb;
-  }, []);
+  const setProgressCallback = useCallback((_cb: any) => {}, []);
 
   useEffect(() => {
     if (!enabled) return;
@@ -52,7 +37,7 @@ export function useGazeTracker(enabled: boolean) {
     `;
     document.body.appendChild(dot);
 
-    // ── Video container (draggable) ──
+    // ── Shared video container ──
     const container = document.createElement('div');
     container.id = 'gaze-video-container';
     container.style.cssText = `
@@ -74,6 +59,7 @@ export function useGazeTracker(enabled: boolean) {
     handle.innerHTML = `<span style="color:white;font-size:11px;font-family:sans-serif;">⠿ drag</span>`;
 
     const video = document.createElement('video');
+    video.id = 'shared-webcam-video';
     video.autoplay = true;
     video.playsInline = true;
     video.muted = true;
@@ -82,7 +68,6 @@ export function useGazeTracker(enabled: boolean) {
       object-fit: cover; display: block;
       transform: scaleX(-1);
     `;
-    videoRef.current = video;
 
     container.appendChild(handle);
     container.appendChild(video);
@@ -107,13 +92,15 @@ export function useGazeTracker(enabled: boolean) {
     // Smoothing
     const xBuf: number[] = [], yBuf: number[] = [];
     let lastX = -999, lastY = -999;
+    // Use calibration from onboarding if available (stored on window)
+    let refNoseX = (window as any).__noseRefX ?? 0.5;
+    let refNoseY = (window as any).__noseRefY ?? 0.4;
+    let calibrated = (window as any).__noseCalibrated ?? false;
+    const animFrameRef = { current: 0 };
+    const runningRef = { current: false };
+    const landmarkerRef = { current: null as any };
+    const handScrollRef = { lastY: null as number | null, lastTime: 0 };
 
-    // Calibration offset — user clicks to set reference point
-    let offsetX = 0, offsetY = 0;
-    let refNoseX = 0.5, refNoseY = 0.4;
-    let calibrated = false;
-
-    // Show calibration hint
     const hint = document.createElement('div');
     hint.style.cssText = `
       position: fixed; top: 16px; left: 50%;
@@ -123,48 +110,39 @@ export function useGazeTracker(enabled: boolean) {
       font-size: 13px; font-family: sans-serif;
       z-index: 999998; pointer-events: none;
     `;
-    hint.textContent = '👃 Look straight at the screen and press Space to calibrate';
+    hint.textContent = '👃 Look straight and press Space to calibrate';
     document.body.appendChild(hint);
 
     function calibrate(noseX: number, noseY: number) {
-      refNoseX = noseX;
-      refNoseY = noseY;
-      offsetX = window.innerWidth / 2 - (noseX * window.innerWidth);
-      offsetY = window.innerHeight / 2 - (noseY * window.innerHeight);
+      refNoseX = noseX; refNoseY = noseY;
       calibrated = true;
-      hint.textContent = '✓ Calibrated! Move your nose to control the cursor';
-      setTimeout(() => hint.remove(), 3000);
+      (window as any).__noseRefX = noseX;
+      (window as any).__noseRefY = noseY;
+      (window as any).__noseCalibrated = true;
+      hint.textContent = '✓ Calibrated! Use voice commands to interact';
+      setTimeout(() => { try { hint.remove(); } catch(_) {} }, 3000);
     }
 
     const onSpace = (e: KeyboardEvent) => {
       if (e.code === 'Space' && landmarkerRef.current) {
-        const v = videoRef.current;
-        if (!v || v.readyState < 2) return;
-        const results = landmarkerRef.current.detectForVideo(v, performance.now());
+        const results = landmarkerRef.current.detectForVideo(video, performance.now());
         if (results?.faceLandmarks?.[0]) {
-          // Nose tip = landmark 4
-          const nose = results.faceLandmarks[0][4];
-          calibrate(nose.x, nose.y);
+          calibrate(results.faceLandmarks[0][4].x, results.faceLandmarks[0][4].y);
         }
       }
     };
     window.addEventListener('keydown', onSpace);
 
     function processNose(noseX: number, noseY: number) {
-      // Scale nose movement to screen
       const SCALE = 3.5;
       let screenX: number, screenY: number;
-
       if (calibrated) {
-        const dx = (refNoseX - noseX) * SCALE;
-        const dy = (noseY - refNoseY) * SCALE;
-        screenX = window.innerWidth / 2 + dx * window.innerWidth;
-        screenY = window.innerHeight / 2 + dy * window.innerHeight;
+        screenX = window.innerWidth / 2 + (refNoseX - noseX) * SCALE * window.innerWidth;
+        screenY = window.innerHeight / 2 + (noseY - refNoseY) * SCALE * window.innerHeight;
       } else {
         screenX = noseX * window.innerWidth;
         screenY = noseY * window.innerHeight;
       }
-
       screenX = Math.max(0, Math.min(window.innerWidth, screenX));
       screenY = Math.max(0, Math.min(window.innerHeight, screenY));
 
@@ -172,55 +150,20 @@ export function useGazeTracker(enabled: boolean) {
       if (xBuf.length > SMOOTH) { xBuf.shift(); yBuf.shift(); }
       const x = xBuf.reduce((a, b) => a + b) / xBuf.length;
       const y = yBuf.reduce((a, b) => a + b) / yBuf.length;
-
       if (Math.abs(x - lastX) < DEAD_ZONE && Math.abs(y - lastY) < DEAD_ZONE) return;
       lastX = x; lastY = y;
 
       dot.style.display = 'block';
       dot.style.left = `${x}px`;
       dot.style.top = `${y}px`;
-
-      // Check dwell targets
-      let gazedId: string | null = null;
-      targetsRef.current.forEach((_, id) => {
-        const el = document.querySelector(`[data-gaze-id="${id}"]`);
-        if (!el) return;
-        const rect = el.getBoundingClientRect();
-        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) gazedId = id;
-      });
-
-      if (gazedId) {
-        if (!dwellRef.current || dwellRef.current.id !== gazedId) {
-          if (dwellRef.current?.timer) clearTimeout(dwellRef.current.timer);
-          if (dwellRef.current) progressCallbackRef.current?.(dwellRef.current.id, 0);
-          const startTime = Date.now();
-          const capturedId = gazedId;
-          const timer = setTimeout(() => {
-            targetsRef.current.get(capturedId)?.action();
-            dwellRef.current = null;
-            progressCallbackRef.current?.(capturedId, 0);
-          }, DWELL_TIME);
-          dwellRef.current = { id: gazedId, startTime, timer };
-        } else {
-          const elapsed = Date.now() - dwellRef.current.startTime;
-          progressCallbackRef.current?.(gazedId, Math.min(elapsed / DWELL_TIME, 1));
-        }
-      } else {
-        if (dwellRef.current) {
-          if (dwellRef.current.timer) clearTimeout(dwellRef.current.timer);
-          progressCallbackRef.current?.(dwellRef.current.id, 0);
-          dwellRef.current = null;
-        }
-      }
     }
 
-    // ── MediaPipe Face Landmarker ──
-    async function init() {
+    async function init(retryCount = 0) {
       try {
         const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
-
-      console.log('GazeCloudAPI loaded, starting...');
-
+        const filesetResolver = await FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+        );
         landmarkerRef.current = await FaceLandmarker.createFromOptions(filesetResolver, {
           baseOptions: {
             modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
@@ -238,40 +181,95 @@ export function useGazeTracker(enabled: boolean) {
         video.srcObject = stream;
         await video.play();
 
-        console.log('Nose tracking ready — press Space to calibrate');
+        // Check video is actually showing
+        if (video.videoWidth === 0 && retryCount < 3) {
+          await new Promise(r => setTimeout(r, 500));
+          stream.getTracks().forEach(t => t.stop());
+          video.srcObject = null;
+          init(retryCount + 1);
+          return;
+        }
+
+        // Also init hand scroll using same stream
+        initHandScroll(stream);
+
         runningRef.current = true;
         detect();
       } catch (err) {
         console.error('Init error:', err);
+        if (retryCount < 3) {
+          setTimeout(() => init(retryCount + 1), 1000);
+        }
       }
+    }
+
+    function initHandScroll(stream: MediaStream) {
+      import('@mediapipe/hands').then(({ Hands }) => {
+        const hands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 0, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+
+        hands.onResults((results: any) => {
+          if (!results.multiHandLandmarks?.length) { handScrollRef.lastY = null; return; }
+          const wristY = results.multiHandLandmarks[0][0].y;
+          const now = Date.now();
+          if (handScrollRef.lastY !== null && now - handScrollRef.lastTime > 150) {
+            const dy = wristY - handScrollRef.lastY;
+            if (Math.abs(dy) > 0.03) {
+              // Smart scroll: use global ref set by CustomSelect when dropdown is open
+              const openDropdownRef = (window as any).__openDropdownRef;
+              const openDropdown = openDropdownRef?.current as HTMLElement;
+              if (openDropdown) {
+                openDropdown.scrollTop += dy > 0 ? 80 : -80;
+              } else {
+                const taskList = (document.querySelector('.task-list') || document.querySelector('.ob-card')) as HTMLElement;
+                taskList?.scrollBy({ top: dy > 0 ? 150 : -150, behavior: 'smooth' });
+              }
+              handScrollRef.lastTime = now;
+            }
+          }
+          handScrollRef.lastY = wristY;
+        });
+
+        // Feed same video frames to hand model
+        const feedHands = async () => {
+          if (!runningRef.current) return;
+          if (video.readyState >= 2) await hands.send({ image: video });
+          setTimeout(feedHands, 33);
+        };
+        setTimeout(feedHands, 500);
+      }).catch(() => {});
     }
 
     function detect() {
       if (!runningRef.current || !landmarkerRef.current) return;
-      const v = videoRef.current;
-      if (v && v.readyState >= 2) {
-        const results = landmarkerRef.current.detectForVideo(v, performance.now());
+      if (video.readyState >= 2) {
+        const results = landmarkerRef.current.detectForVideo(video, performance.now());
         if (results?.faceLandmarks?.[0]) {
-          const nose = results.faceLandmarks[0][4]; // nose tip
+          const nose = results.faceLandmarks[0][4];
           if (nose) processNose(nose.x, nose.y);
         }
       }
       animFrameRef.current = requestAnimationFrame(detect);
     }
 
-    init();
+    // Delay to ensure webcam is released before reinitializing
+    const initTimer = setTimeout(() => { init(); }, 800);
 
     return () => {
+      clearTimeout(initTimer);
       runningRef.current = false;
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      if (dwellRef.current?.timer) clearTimeout(dwellRef.current.timer);
-      dwellRef.current = null;
-      dot.remove();
-      container.remove();
-      hint.remove();
+      cancelAnimationFrame(animFrameRef.current);
+      try { dot.remove(); } catch(_) {}
+      try { container.remove(); } catch(_) {}
+      try { hint.remove(); } catch(_) {}
       window.removeEventListener('keydown', onSpace);
-      const stream = videoRef.current?.srcObject as MediaStream;
-      stream?.getTracks().forEach(t => t.stop());
+      try {
+        const stream = video.srcObject as MediaStream;
+        stream?.getTracks().forEach(t => t.stop());
+        video.srcObject = null;
+      } catch(_) {}
+      // Reset global dropdown ref
+      (window as any).__openDropdownRef = null;
     };
   }, [enabled]);
 

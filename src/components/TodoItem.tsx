@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { Todo, Priority } from '../types';
 import { useStore } from '../store';
 import { Star, Calendar, Flag, X, Plus, Trash2, Tag, StickyNote } from 'lucide-react';
-import { useGaze } from '../modules/gaze/GazeContext';
-import { GazeProgress } from '../modules/gaze/GazeProgress';
-import GestureDateControl from "./GestureDateControl";  
+import { useExpanded } from '../context/ExpandedTodoContext';
+import GestureDateControl from "./GestureDateControl";
 
 const priorityConfig: { value: Priority; label: string; color: string }[] = [
   { value: 'low', label: 'Low', color: '#4ade80' },
@@ -13,30 +12,23 @@ const priorityConfig: { value: Priority; label: string; color: string }[] = [
   { value: 'urgent', label: 'Urgent', color: '#ef4444' },
 ];
 
+function shiftDate(base: string | undefined, days: number): string {
+  const d = new Date((base || new Date().toISOString().split('T')[0]) + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
 interface Props { todo: Todo; }
 
 export function TodoItem({ todo }: Props) {
   const { dispatch } = useStore();
-  const { enabled, registerTarget, getProgress } = useGaze();
-  const [expanded, setExpanded] = useState(false);
+  const { expandedId, toggleExpanded } = useExpanded();
+  const expanded = expandedId === todo.id;
+
   const [newStep, setNewStep] = useState('');
   const [newTag, setNewTag] = useState('');
   const [editingText, setEditingText] = useState(false);
   const [textVal, setTextVal] = useState(todo.text);
-
-  const gazeExpandId = `todo-expand-${todo.id}`;
-  const gazeCheckId = `todo-check-${todo.id}`;
-
-  // Register gaze targets
-  useEffect(() => {
-    if (!enabled) return;
-    const u1 = registerTarget(gazeExpandId, () => setExpanded(true));
-    const u2 = registerTarget(gazeCheckId, () => dispatch({ type: 'TOGGLE_TODO', id: todo.id }));
-    return () => { u1(); u2(); };
-  }, [enabled, todo.id]);
-
-  const expandProgress = getProgress(gazeExpandId);
-  const checkProgress = getProgress(gazeCheckId);
 
   const p = priorityConfig.find(x => x.value === todo.priority)!;
   const isOverdue = todo.dueDate && !todo.completed && new Date(todo.dueDate) < new Date(new Date().toDateString());
@@ -60,48 +52,40 @@ export function TodoItem({ todo }: Props) {
     setNewTag('');
   }
 
+  function handleScroll(direction: 'up' | 'down') {
+    const taskList = document.querySelector('.task-list');
+    if (taskList) {
+      taskList.scrollBy({ top: direction === 'down' ? 120 : -120, behavior: 'smooth' });
+    }
+  }
+
   return (
     <div
       className={`todo-item-wrap ${todo.completed ? 'todo-item-wrap--done' : ''} ${expanded ? 'todo-item-wrap--expanded' : ''}`}
-      onClick={() => !editingText && setExpanded(!expanded)}
+      data-todo-id={todo.id}
+      onClick={() => !editingText && toggleExpanded(todo.id)}
     >
       <div className="todo-row">
-        {/* Check button with gaze */}
-        <div
-          data-gaze-id={gazeCheckId}
-          style={{ position: 'relative', flexShrink: 0 }}
+        <button
+          className={`check-btn ${todo.completed ? 'check-btn--checked' : ''}`}
+          onClick={e => { e.stopPropagation(); dispatch({ type: 'TOGGLE_TODO', id: todo.id }); }}
+          style={{ '--p-color': p.color } as React.CSSProperties}
         >
-          <button
-            className={`check-btn ${todo.completed ? 'check-btn--checked' : ''}`}
-            onClick={e => { e.stopPropagation(); dispatch({ type: 'TOGGLE_TODO', id: todo.id }); }}
-            style={{ '--p-color': p.color } as React.CSSProperties}
-          >
-            {todo.completed && (
-              <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            )}
-          </button>
-          {enabled && <GazeProgress progress={checkProgress} size={32} color="#4ade80" />}
-        </div>
+          {todo.completed && (
+            <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+              <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
+        </button>
 
-        {/* Task body with gaze expand */}
-        <div
-          className="todo-body"
-          data-gaze-id={gazeExpandId}
-          style={{ position: 'relative' }}
-          onClick={e => editingText && e.stopPropagation()}
-        >
+        <div className="todo-body" onClick={e => editingText && e.stopPropagation()}>
           {editingText ? (
-            <input
-              className="todo-text-input"
-              value={textVal}
+            <input className="todo-text-input" value={textVal}
               onChange={e => setTextVal(e.target.value)}
               onBlur={saveText}
               onKeyDown={e => { if (e.key === 'Enter') saveText(); if (e.key === 'Escape') setEditingText(false); }}
               onClick={e => e.stopPropagation()}
-              autoFocus
-            />
+              autoFocus />
           ) : (
             <span
               className={`todo-text ${todo.completed ? 'todo-text--done' : ''}`}
@@ -125,16 +109,6 @@ export function TodoItem({ todo }: Props) {
               <Flag size={9} />{p.label}
             </span>
           </div>
-          {/* Gaze progress overlay on task body */}
-          {enabled && expandProgress > 0 && (
-            <div style={{
-              position: 'absolute', inset: 0,
-              background: `rgba(0,120,212,${expandProgress * 0.08})`,
-              borderRadius: 8,
-              pointerEvents: 'none',
-              transition: 'background 0.05s',
-            }} />
-          )}
         </div>
 
         <button
@@ -147,6 +121,16 @@ export function TodoItem({ todo }: Props) {
 
       {expanded && (
         <div className="todo-detail" onClick={e => e.stopPropagation()}>
+
+          {/* Scroll gesture for task list */}
+          <div className="td-section">
+            <div className="td-section-header"><span>Scroll</span></div>
+            <GestureDateControl
+              onSwipeUp={() => handleScroll('up')}
+              onSwipeDown={() => handleScroll('down')}
+            />
+          </div>
+
           <div className="td-section">
             <div className="td-section-header">
               <span>Steps</span>
@@ -189,67 +173,12 @@ export function TodoItem({ todo }: Props) {
             <div className="td-section-header"><Calendar size={12} /><span>Due date</span></div>
             <input type="date" className="detail-input" value={todo.dueDate || ''}
               onChange={e => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { dueDate: e.target.value || undefined } })} />
-              <GestureDateControl
-  onSwipeRight={() => {
-    const baseDate = todo.dueDate || new Date().toISOString().split('T')[0];
-    const currentDate = new Date(baseDate + 'T00:00:00');
-
-    currentDate.setDate(currentDate.getDate() + 1);
-
-    dispatch({
-      type: 'UPDATE_TODO',
-      id: todo.id,
-      updates: {
-        dueDate: currentDate.toISOString().split('T')[0],
-      },
-    });
-  }}
-
-  onSwipeLeft={() => {
-    const baseDate = todo.dueDate || new Date().toISOString().split('T')[0];
-    const currentDate = new Date(baseDate + 'T00:00:00');
-
-    currentDate.setDate(currentDate.getDate() - 1);
-
-    dispatch({
-      type: 'UPDATE_TODO',
-      id: todo.id,
-      updates: {
-        dueDate: currentDate.toISOString().split('T')[0],
-      },
-    });
-  }}
-
-  onSwipeUp={() => {
-    const baseDate = todo.dueDate || new Date().toISOString().split('T')[0];
-    const currentDate = new Date(baseDate + 'T00:00:00');
-
-    currentDate.setDate(currentDate.getDate() - 7);
-
-    dispatch({
-      type: 'UPDATE_TODO',
-      id: todo.id,
-      updates: {
-        dueDate: currentDate.toISOString().split('T')[0],
-      },
-    });
-  }}
-
-  onSwipeDown={() => {
-    const baseDate = todo.dueDate || new Date().toISOString().split('T')[0];
-    const currentDate = new Date(baseDate + 'T00:00:00');
-
-    currentDate.setDate(currentDate.getDate() + 7);
-
-    dispatch({
-      type: 'UPDATE_TODO',
-      id: todo.id,
-      updates: {
-        dueDate: currentDate.toISOString().split('T')[0],
-      },
-    });
-  }}
-/>
+            <GestureDateControl
+              onSwipeRight={() => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { dueDate: shiftDate(todo.dueDate, 1) } })}
+              onSwipeLeft={() => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { dueDate: shiftDate(todo.dueDate, -1) } })}
+              onSwipeUp={() => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { dueDate: shiftDate(todo.dueDate, -7) } })}
+              onSwipeDown={() => dispatch({ type: 'UPDATE_TODO', id: todo.id, updates: { dueDate: shiftDate(todo.dueDate, 7) } })}
+            />
           </div>
 
           <div className="td-section">
