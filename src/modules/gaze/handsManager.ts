@@ -46,15 +46,8 @@ function initHands(): Promise<any> {
       subscribers.forEach(cb => cb(results));
     });
 
-    // Warm up: send a 1×1 dummy frame so WASM + model load fully before real feed
-    await new Promise<void>(resolve => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 1; canvas.height = 1;
-      const once = () => { h.onResults((r: any) => { subscribers.forEach(cb => cb(r)); }); resolve(); };
-      h.send({ image: canvas }).then(once).catch(once);
-      setTimeout(resolve, 4000); // hard fallback
-    });
-
+    // No dummy frame — just initialize and let the real video feed start it
+    // Sending a dummy canvas before real video causes WASM state corruption
     handsInstance = h;
     return h;
   })();
@@ -66,15 +59,19 @@ async function startFeed(video: HTMLVideoElement) {
   const hands = await initHands();
   if (!feedRunning || currentVideo !== video) return;
 
+  // Give model a moment to fully initialize before sending real frames
+  await new Promise(r => setTimeout(r, 300));
+  if (!feedRunning || currentVideo !== video) return;
+
   const tick = async () => {
     if (!feedRunning || currentVideo !== video) return;
 
     if (video.readyState >= 2) {
       try {
         await hands.send({ image: video });
-      } catch (_) {
-        console.warn('[handsManager] send() failed — stopping feed');
-        feedRunning = false;
+      } catch (err) {
+        // Model not ready yet — skip this frame silently, try again soon
+        feedLoopId = setTimeout(tick, 200);
         return;
       }
     }

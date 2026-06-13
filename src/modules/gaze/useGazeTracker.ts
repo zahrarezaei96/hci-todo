@@ -127,10 +127,13 @@ export function useGazeTracker(enabled: boolean) {
 
     const onSpace = (e: KeyboardEvent) => {
       if (e.code === 'Space' && landmarkerRef.current) {
-        const results = landmarkerRef.current.detectForVideo(video, performance.now());
-        if (results?.faceLandmarks?.[0]) {
-          calibrate(results.faceLandmarks[0][4].x, results.faceLandmarks[0][4].y);
-        }
+        tsCounter += 1000; // jump ahead so calibration ts > last detect ts
+        try {
+          const results = landmarkerRef.current.detectForVideo(video, tsCounter);
+          if (results?.faceLandmarks?.[0]) {
+            calibrate(results.faceLandmarks[0][4].x, results.faceLandmarks[0][4].y);
+          }
+        } catch(_) {}
       }
     };
     window.addEventListener('keydown', onSpace);
@@ -212,8 +215,8 @@ export function useGazeTracker(enabled: boolean) {
       // Use singleton handsManager — prevents multiple Hands instances loading simultaneously
       let anchorY: number | null = null;
       let lastGestureTime = 0;
-      const SWIPE_THRESHOLD = 0.06;
-      const GESTURE_COOLDOWN = 600;
+      const SWIPE_THRESHOLD = 0.10;
+      const GESTURE_COOLDOWN = 800;
 
       handsManager.subscribe('gazeTracker', (results: any) => {
         if (!results.multiHandLandmarks?.length) { anchorY = null; return; }
@@ -241,16 +244,22 @@ export function useGazeTracker(enabled: boolean) {
     }
 
     let lastDetectTime = 0;
+    let tsCounter = 1; // strictly increasing timestamp for MediaPipe
     const DETECT_INTERVAL = 66; // ~15fps — enough for nose cursor, frees CPU for speech
 
     function detect(now: number) {
       if (!runningRef.current || !landmarkerRef.current) return;
       if (now - lastDetectTime >= DETECT_INTERVAL && video.readyState >= 2) {
         lastDetectTime = now;
-        const results = landmarkerRef.current.detectForVideo(video, now);
-        if (results?.faceLandmarks?.[0]) {
-          const nose = results.faceLandmarks[0][4];
-          if (nose) processNose(nose.x, nose.y);
+        tsCounter += 100; // always increasing, never goes back
+        try {
+          const results = landmarkerRef.current.detectForVideo(video, tsCounter);
+          if (results?.faceLandmarks?.[0]) {
+            const nose = results.faceLandmarks[0][4];
+            if (nose) processNose(nose.x, nose.y);
+          }
+        } catch(_) {
+          // timestamp error — skip frame, counter already advanced so next frame is safe
         }
       }
       animFrameRef.current = requestAnimationFrame(detect);

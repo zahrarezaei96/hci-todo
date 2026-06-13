@@ -60,7 +60,24 @@ function getElementAtNoseCursor() {
 
 export function startSpeechRecognition() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) { console.log("Speech recognition not supported"); return; }
+  if (!SpeechRecognition) {
+    // Firefox doesn't support SpeechRecognition — show user-facing warning
+    let warn = document.getElementById('browser-warn');
+    if (!warn) {
+      warn = document.createElement('div');
+      warn.id = 'browser-warn';
+      warn.style.cssText = `
+        position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+        background: #d93025; color: white; padding: 10px 20px;
+        border-radius: 10px; font-size: 13px; font-family: sans-serif;
+        z-index: 999999; pointer-events: none; text-align: center;
+      `;
+      warn.textContent = '⚠️ Voice commands require Chrome or Edge — Firefox is not supported';
+      document.body.appendChild(warn);
+    }
+    console.log("Speech recognition not supported");
+    return;
+  }
   if (hasStarted) return;
 
   recognition = new SpeechRecognition();
@@ -125,14 +142,27 @@ export function startSpeechRecognition() {
         const trigger = customSelect.querySelector('button');
         trigger?.click();
       } else {
-        // Toggle todo item
-        const todoWrap = target?.closest('.todo-item-wrap');
-        if (todoWrap) {
-          const todoId = todoWrap.getAttribute('data-todo-id');
-          if (todoId && toggleExpandedFn) {
-            toggleExpandedFn(todoId);
-          } else {
-            todoWrap.click();
+        // If "close" and a todo is expanded, close it directly
+        if (text.includes("close")) {
+          const expandedWrap = document.querySelector('.todo-item-wrap--expanded');
+          if (expandedWrap) {
+            const todoId = expandedWrap.getAttribute('data-todo-id');
+            if (todoId && toggleExpandedFn) {
+              toggleExpandedFn(todoId);
+            } else {
+              expandedWrap.click();
+            }
+          }
+        } else {
+          // "open" / "expand" — use cursor target
+          const todoWrap = target?.closest('.todo-item-wrap');
+          if (todoWrap) {
+            const todoId = todoWrap.getAttribute('data-todo-id');
+            if (todoId && toggleExpandedFn) {
+              toggleExpandedFn(todoId);
+            } else {
+              todoWrap.click();
+            }
           }
         }
       }

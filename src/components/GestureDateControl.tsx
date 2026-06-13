@@ -32,8 +32,8 @@ export default function GestureDateControl({
       return;
     }
 
-    const SWIPE_THRESHOLD = 0.06;
-    const GESTURE_COOLDOWN = 800;
+    const SWIPE_THRESHOLD = 0.10;
+    const GESTURE_COOLDOWN = 1000;
 
     handsManager.subscribe(instanceId.current, (results) => {
       if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
