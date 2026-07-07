@@ -33,11 +33,12 @@ export function Onboarding({ onComplete }: Props) {
   }, []);
 
   function canNext() {
-    if (step === 0) return name.trim().length >= 2;
-    if (step === 1) return gender !== null && birthday !== '' && !birthday.includes('undefined') && birthday.split('-').every(p => p && p !== '01' || true);
-    if (step === 2) return avatar !== '';
-    return false;
-  }
+  if (step === 0) return true;
+  if (step === 1) return name.trim().length >= 2;
+  if (step === 2) return gender !== null && birthday !== "" && !birthday.includes("undefined");
+  if (step === 3) return avatar !== "";
+  return false;
+}
 
   function finish() {
     if (!gender || !avatar) return;
@@ -52,14 +53,48 @@ export function Onboarding({ onComplete }: Props) {
 
         {/* Progress dots */}
         <div className="ob-dots">
-          {[0, 1, 2].map(i => (
+          {[0, 1, 2, 3].map(i => (
             <div key={i} className={`ob-dot ${step === i ? 'ob-dot--active' : ''} ${step > i ? 'ob-dot--done' : ''}`}>
               {step > i ? <Check size={10} /> : null}
             </div>
           ))}
         </div>
-
         {step === 0 && (
+  <div className="ob-step">
+    <div className="ob-emoji">👋</div>
+
+<h1 className="ob-title">Welcome!</h1>
+
+<p className="ob-sub">
+  Before you begin, let's take a quick look at the different ways you can interact with the application.
+</p>
+
+    <div style={{ textAlign: "left", marginTop: 20, lineHeight: "1.8" }}>
+
+  <p>🖐 <strong>Hand Gestures</strong><br />
+  Swipe up or down to select or adjust the date..</p>
+
+  <p>👃 <strong>Nose Tracking</strong><br />
+  Press <strong>Press Space to calibrate before using Nose Tracking.</strong><br />
+Then move your head to control the cursor.</p>
+
+  <p>🎤 <strong>Voice Commands</strong><br />
+ Use voice commands to navigate and perform actions.</p>
+
+  <p>⌨️ <strong>Mouse & Keyboard</strong><br />
+  Use the mouse and keyboard whenever you prefer.</p>
+
+</div>
+
+    <p style={{ marginTop: 20 }}>
+  You can switch between interaction methods at any time.
+  <br /><br />
+  Click <strong>Get Started</strong> to begin the setup.
+</p>
+  </div>
+)}
+
+        {step === 1 && (
           <div className="ob-step">
             <div className="ob-emoji">👋</div>
             <h1 className="ob-title">Welcome!</h1>
@@ -71,7 +106,7 @@ export function Onboarding({ onComplete }: Props) {
           </div>
         )}
 
-        {step === 1 && (
+        {step === 2 && (
           <div className="ob-step">
             <div className="ob-emoji">🎂</div>
             <h1 className="ob-title">Tell us about you</h1>
@@ -125,7 +160,7 @@ export function Onboarding({ onComplete }: Props) {
           </div>
         )}
 
-        {step === 2 && (
+        {step === 3 && (
           <div className="ob-step">
             <div className="ob-emoji">{avatar || (gender === 'male' ? '👨' : '👩')}</div>
             <h1 className="ob-title">Pick your avatar</h1>
@@ -145,10 +180,10 @@ export function Onboarding({ onComplete }: Props) {
               <ChevronLeft size={18} /> Back
             </button>
           ) : <div />}
-          {step < 2 ? (
+          {step < 3 ? (
             <button className={`ob-next ${canNext() ? '' : 'ob-next--disabled'}`}
               onClick={() => canNext() && setStep(step + 1)}>
-              Next <ChevronRight size={18} />
+              Get Started <ChevronRight size={18} />
             </button>
           ) : (
             <button className={`ob-next ${canNext() ? '' : 'ob-next--disabled'}`}
